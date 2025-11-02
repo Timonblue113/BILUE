@@ -47,7 +47,7 @@
       1) Web tự nạp dữ liệu Google Sheets khi mở trang →
       2) Nhập từ khóa & Enter để tìm (cộng dồn, cho phép SKU trùng) →
       3) Sửa, thêm dòng, hoặc 🗑 xóa dòng sai →
-      4) Xuất Excel (có STT) hoặc Xóa bảng để tải lại.
+      4) Xuất Excel hoặc Xóa bảng để tải lại.
     </div>
 
     <div id="table-holder" style="margin-top:12px; display:none;">
@@ -56,6 +56,7 @@
   </div>
 
 <script>
+/* ====== Hàm định dạng & xóa ====== */
 function deleteIcon(){return "<button class='del-btn'>Xóa</button>";}
 function deleteRow(e,cell){
   const row=cell.getRow();
@@ -68,6 +69,7 @@ function deleteRow(e,cell){
   }
 }
 
+/* ====== Cấu hình cột mặc định ====== */
 const defaultColumns=[
   {title:"STT", formatter:"rownum", width:60, hozAlign:"center"},
   {title:"🗑", formatter:deleteIcon, width:60, hozAlign:"center", headerSort:false, cellClick:deleteRow},
@@ -95,21 +97,28 @@ let table=new Tabulator("#sku-table",{
 });
 
 let sourceData=[];
+let currentColumns=defaultColumns.map(c=>c.field);
 let displayedData=[];
 
+/* ====== Hỗ trợ ====== */
+function normalizeKey(k){return String(k||'').trim();}
 function showMessage(msg,isError=false){
   const el=document.getElementById('message');
   el.textContent=msg;
   el.style.color=isError?"#b91c1c":"#334155";
 }
-function refreshSTT(){table.redraw(true);}
+function refreshSTT(){
+  table.redraw(true);
+}
 
+/* ====== Thiết lập bảng ====== */
 function setTableData(arr){
   sourceData=arr.map(r=>{
     const out={};
-    Object.keys(r).forEach(k=>out[String(k).trim()]=r[k]==null?"":String(r[k]));
+    Object.keys(r).forEach(k=>out[normalizeKey(k)]=r[k]==null?"":String(r[k]));
     return out;
   });
+  const keys=sourceData.length?Object.keys(sourceData[0]):currentColumns;
   table.clearData();
   displayedData=[];
   table.setData(sourceData);
@@ -117,6 +126,7 @@ function setTableData(arr){
   showMessage("✅ Đã tải "+arr.length+" dòng từ Google Sheets — sẵn sàng tra cứu!");
 }
 
+/* ====== Load file hoặc Google Sheets ====== */
 function loadFile(file){
   const reader=new FileReader();
   const name=(file.name||'').toLowerCase();
@@ -131,9 +141,12 @@ function loadFile(file){
         arr=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});
       }
       setTableData(arr);
-    }catch(err){showMessage("Lỗi khi đọc file: "+err.message,true);}
+    }catch(err){
+      showMessage("Lỗi khi đọc file: "+err.message,true);
+    }
   };
-  if(name.endsWith(".csv"))reader.readAsText(file,"utf-8");else reader.readAsArrayBuffer(file);
+  if(name.endsWith(".csv"))reader.readAsText(file,"utf-8");
+  else reader.readAsArrayBuffer(file);
 }
 
 function loadFromGoogleSheet(){
@@ -149,6 +162,7 @@ function loadFromGoogleSheet(){
     .catch(err=>showMessage("❌ Lỗi tải Google Sheets: "+err,true));
 }
 
+/* ====== Tìm kiếm (cộng dồn) ====== */
 function doSearch(){
   const q=document.getElementById('searchBox').value.trim().toLowerCase();
   if(!sourceData.length){showMessage("Chưa có dữ liệu!",true);return;}
@@ -164,6 +178,7 @@ function doSearch(){
   document.getElementById('searchBox').value="";
 }
 
+/* ====== Các nút ====== */
 document.getElementById('loadFileBtn').addEventListener('click',()=>{
   const f=document.getElementById('fileInput').files[0];
   if(!f)loadFromGoogleSheet();else loadFile(f);
@@ -173,8 +188,8 @@ document.getElementById('searchBox').addEventListener('keydown',e=>{
   if(e.key==="Enter"){e.preventDefault();doSearch();}
 });
 document.getElementById('addRowBtn').addEventListener('click',()=>{
-  const empty={};defaultColumns.forEach(c=>{if(c.field)empty[c.field]='';});
-  table.addRow(empty,true).then(()=>{
+  const empty={};(currentColumns.length?currentColumns:defaultColumns.map(c=>c.field)).forEach(k=>empty[k]='');
+  table.addRow(empty,true).then(row=>{
     displayedData.push(empty);
     sourceData.push(empty);
     refreshSTT();
@@ -191,16 +206,14 @@ document.getElementById('clearTableBtn').addEventListener('click',()=>{
 document.getElementById('downloadXLSXBtn').addEventListener('click',()=>{
   displayedData=table.getData();
   if(!displayedData.length){showMessage("Không có dữ liệu để tải",true);return;}
-  
-  // ✅ Tạo dữ liệu có cột STT khi xuất
-  const exportData = displayedData.map((r, i) => ({STT: i+1, ...r}));
-  const ws=XLSX.utils.json_to_sheet(exportData);
+  const ws=XLSX.utils.json_to_sheet(displayedData);
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,"Data");
   XLSX.writeFile(wb,"BKM_export.xlsx");
-  showMessage("✅ Đã xuất file Excel có STT thành công!");
+  showMessage("✅ Đã xuất file Excel thành công!");
 });
 
+/* ====== Tự động load ====== */
 window.addEventListener('DOMContentLoaded',loadFromGoogleSheet);
 </script>
 </body>
