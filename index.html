@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Tra cứu SKU — Offline (nạp Excel)</title>
+  <title>Tra cứu SKU — Online (Google Sheets + Excel)</title>
 
   <!-- Tabulator -->
   <link href="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
@@ -28,7 +28,7 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Quản lý & Tra cứu SKU — Offline</h1>
+    <h1>Quản lý & Tra cứu SKU — Online/Offline</h1>
 
     <div class="controls">
       <input id="searchBox" type="text" placeholder="Nhập SKU / Tên hàng / Nhãn hiệu..." style="min-width:300px" />
@@ -40,7 +40,7 @@
       <div id="message">Mở lần đầu cần Internet để tải thư viện, sau đó có thể dùng offline.</div>
     </div>
 
-    <div class="hint">1) Nạp file → 2) Nhập từ khóa & Enter để tìm (cộng dồn) → 3) Sửa hoặc thêm dòng trực tiếp.</div>
+    <div class="hint">1) Nạp file / tự tải từ Google Sheets → 2) Nhập từ khóa & Enter để tìm (cộng dồn) → 3) Sửa hoặc thêm dòng trực tiếp.</div>
 
     <div id="table-holder" style="margin-top:12px; display:none;">
       <div id="sku-table"></div>
@@ -69,7 +69,7 @@ let table = new Tabulator("#sku-table", {
   layout:"fitColumns",
   reactiveData:true,
   columns: defaultColumns,
-  placeholder:"Chưa nạp dữ liệu. Bấm Nạp file để chọn Excel/CSV",
+  placeholder:"Chưa nạp dữ liệu. Bấm Nạp file hoặc tải từ Google Sheets",
   cellEdited:()=> sourceData = table.getData(),
 });
 
@@ -77,14 +77,20 @@ let sourceData = [];
 let currentColumns = defaultColumns.map(c=>c.field);
 let displayedData = []; // dữ liệu đang hiển thị (để cộng dồn)
 
-/* ====== Xử lý file ====== */
+/* ====== Hỗ trợ ====== */
 function normalizeKey(k){ return String(k||'').trim(); }
 function setTableColumnsFromKeys(keys){
   const cols = keys.map(k=>({title:k, field:k, editor:"input"}));
   table.setColumns(cols);
   currentColumns = keys.slice();
 }
+function showMessage(msg, isError=false){
+  const el = document.getElementById('message');
+  el.textContent = msg;
+  el.style.color = isError ? "#b91c1c" : "#334155";
+}
 
+/* ====== Hiển thị dữ liệu ====== */
 function setTableData(arr){
   sourceData = arr.map(r=>{
     const out = {};
@@ -101,16 +107,7 @@ function setTableData(arr){
   showMessage("Đã nạp dữ liệu: " + arr.length + " dòng. Nhập từ khóa & Enter để tìm (cộng dồn).");
 }
 
-function arrayBufferToWorkbook(ab){ return XLSX.read(ab, {type:"array"}); }
-function workbookToJson(wb){
-  const sheetName = wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  return XLSX.utils.sheet_to_json(ws, {defval:""});
-}
-function parseCsvText(text){
-  const wb = XLSX.read(text, {type:"string"});
-  return workbookToJson(wb);
-}
+/* ====== Nạp file Excel / CSV ====== */
 function loadFile(file){
   const reader = new FileReader();
   const name = (file.name||'').toLowerCase();
@@ -118,10 +115,10 @@ function loadFile(file){
     try{
       let arr;
       if(name.endsWith(".csv")){
-        arr = parseCsvText(e.target.result);
+        arr = XLSX.utils.sheet_to_json(XLSX.read(e.target.result, {type:"string"}).Sheets[XLSX.read(e.target.result, {type:"string"}).SheetNames[0]], {defval:""});
       } else {
-        const wb = arrayBufferToWorkbook(e.target.result);
-        arr = workbookToJson(wb);
+        const wb = XLSX.read(e.target.result, {type:"array"});
+        arr = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:""});
       }
       setTableData(arr);
     }catch(err){
@@ -133,23 +130,31 @@ function loadFile(file){
   else reader.readAsArrayBuffer(file);
 }
 
-/* ====== Tìm kiếm (cộng dồn) ====== */
-function normalizeVal(v){ return String(v||'').toLowerCase(); }
+/* ====== Nạp dữ liệu từ Google Sheets ====== */
+function loadFromGoogleSheet(){
+  const sheetURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv"; // 👉 thay bằng link CSV của bạn
+  fetch(sheetURL)
+    .then(r => r.text())
+    .then(txt => {
+      const data = XLSX.utils.sheet_to_json(XLSX.read(txt, {type:"string"}).Sheets[XLSX.read(txt, {type:"string"}).SheetNames[0]], {defval:""});
+      setTableData(data);
+      document.getElementById('table-holder').style.display = 'block';
+      showMessage("✅ Đã nạp dữ liệu online từ Google Sheets (" + data.length + " dòng)");
+    })
+    .catch(err => showMessage("❌ Lỗi tải Google Sheets: " + err, true));
+}
 
+/* ====== Tìm kiếm (cộng dồn) ====== */
 function doSearch(){
   const q = document.getElementById('searchBox').value.trim().toLowerCase();
   if(!sourceData.length){ showMessage("Chưa có dữ liệu! Hãy nạp file trước.", true); return; }
-  if(!q){ 
-    showMessage("Ô tìm kiếm trống — giữ nguyên dữ liệu hiện có."); 
-    return; 
-  }
+  if(!q){ showMessage("Ô tìm kiếm trống — giữ nguyên dữ liệu hiện có."); return; }
 
   const filtered = sourceData.filter(row =>
-    Object.values(row).some(v => normalizeVal(v).includes(q))
+    Object.values(row).some(v => String(v||'').toLowerCase().includes(q))
   );
 
   if(filtered.length){
-    // Cộng dồn: thêm các dòng chưa có SKU trùng
     const currentSkus = new Set(displayedData.map(r => r.SKU));
     const newRows = filtered.filter(r => !currentSkus.has(r.SKU));
     displayedData = displayedData.concat(newRows);
@@ -159,78 +164,42 @@ function doSearch(){
   }else{
     showMessage("Không tìm thấy SKU nào khớp '" + q + "'", true);
   }
-  document.getElementById('searchBox').value = ""; // tự clear ô tìm kiếm
+  document.getElementById('searchBox').value = "";
 }
 
-document.getElementById('searchBtn').addEventListener('click', doSearch);
-document.getElementById('searchBox').addEventListener('keydown', function(e){
-  if(e.key === "Enter"){ e.preventDefault(); doSearch(); }
+/* ====== Nút chức năng ====== */
+document.getElementById('loadFileBtn').addEventListener('click', function(){
+  const f = document.getElementById('fileInput').files[0];
+  if(!f) loadFromGoogleSheet();
+  else loadFile(f);
 });
-
-/* ====== Thêm dòng ====== */
-document.getElementById('addRowBtn').addEventListener('click', function(){
-  const empty = {};
-  (currentColumns.length ? currentColumns : defaultColumns.map(c=>c.field)).forEach(k=> empty[k]='');
-  table.addRow(empty, true).then((row)=>{
+document.getElementById('searchBtn').addEventListener('click', doSearch);
+document.getElementById('searchBox').addEventListener('keydown', e=>{
+  if(e.key==="Enter"){ e.preventDefault(); doSearch(); }
+});
+document.getElementById('addRowBtn').addEventListener('click', ()=>{
+  const empty = {}; (currentColumns.length ? currentColumns : defaultColumns.map(c=>c.field)).forEach(k=> empty[k]='');
+  table.addRow(empty, true).then(row=>{
     displayedData.push(empty);
     sourceData.push(empty);
     showMessage("Đã thêm dòng mới. Nhập dữ liệu và Enter để lưu.");
-    const firstCell = row.getCell(currentColumns[0]);
-    if(firstCell){ firstCell.edit(true); }
+    row.getCell(currentColumns[0])?.edit(true);
   });
-  document.getElementById('table-holder').style.display = 'block';
+  document.getElementById('table-holder').style.display='block';
 });
-
-/* ====== Xuất CSV ====== */
-function downloadCurrentCSV(filename = "BKM_export.csv"){
+document.getElementById('downloadCSVBtn').addEventListener('click', ()=>{
+  displayedData = table.getData();
   if(!displayedData.length){ showMessage("Không có dữ liệu để tải", true); return; }
   const keys = Object.keys(displayedData[0]);
-  const rows = [keys.join(",")].concat(displayedData.map(r => keys.map(k => '"' + (String(r[k]||'')).replace(/"/g,'""') + '"').join(",")));
-  const csv = rows.join("\n");
-  const bom = "\uFEFF"; // thêm BOM UTF-8 để Excel nhận đúng font
-  const blob = new Blob([bom + csv], {type:"text/csv;charset=utf-8;"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
+  const rows = [keys.join(",")].concat(displayedData.map(r=>keys.map(k=>'"'+(String(r[k]||'')).replace(/"/g,'""')+'"').join(",")));
+  const csv = "\uFEFF"+rows.join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "BKM_export.csv";
   document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
-  showMessage("Đã xuất CSV: " + filename);
-}
-
-/* ====== Nút nạp/tải ====== */
-document.getElementById('loadFileBtn').addEventListener('click', function(){
-  const f = document.getElementById('fileInput').files[0];
-  if(!f){
-    // Nếu không chọn file thì tự động nạp từ Google Sheets
-    const sheetURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv";
-    fetch(sheetURL)
-      .then(r => r.text())
-      .then(txt => {
-        const wb = XLSX.read(txt, {type:"string"});
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const arr = XLSX.utils.sheet_to_json(ws, {defval:""});
-        setTableData(arr);
-        showMessage("✅ Đã nạp dữ liệu online từ Google Sheets (" + arr.length + " dòng)");
-      })
-      .catch(err => showMessage("❌ Lỗi tải Google Sheets: " + err, true));
-    return;
-  }
+  showMessage("Đã xuất CSV thành công");
 });
-document.getElementById('fileInput').addEventListener('change', function(){
-  const f = this.files[0];
-  if(f) showMessage("File đã chọn: " + f.name);
-});
-document.getElementById('downloadCSVBtn').addEventListener('click', function(){
-  displayedData = table.getData();
-  downloadCurrentCSV();
-});
-
-/* ====== Thông báo ====== */
-function showMessage(msg, isError=false){
-  const el = document.getElementById('message');
-  el.textContent = msg;
-  el.style.color = isError ? "#b91c1c" : "#334155";
-}
 </script>
 </body>
 </html>
