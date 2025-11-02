@@ -56,8 +56,22 @@
   </div>
 
 <script>
-/* ====== Cấu hình bảng ====== */
-const defaultColumns = [
+/* ====== Hàm định dạng & xóa ====== */
+function deleteIcon(){return "<button class='del-btn'>Xóa</button>";}
+function deleteRow(e,cell){
+  const row=cell.getRow();
+  const index=displayedData.indexOf(row.getData());
+  if(index>-1){
+    displayedData.splice(index,1);
+    row.delete();
+    refreshSTT();
+    showMessage("🗑 Đã xóa 1 dòng khỏi bảng hiển thị.");
+  }
+}
+
+/* ====== Cấu hình cột mặc định ====== */
+const defaultColumns=[
+  {title:"STT", formatter:"rownum", width:60, hozAlign:"center"},
   {title:"🗑", formatter:deleteIcon, width:60, hozAlign:"center", headerSort:false, cellClick:deleteRow},
   {title:"NH", field:"NH", editor:"input", width:70},
   {title:"SKU", field:"SKU", editor:"input"},
@@ -72,57 +86,39 @@ const defaultColumns = [
   {title:"Ngày Nhập", field:"NgayNhap", editor:"input"}
 ];
 
-let table = new Tabulator("#sku-table", {
+let table=new Tabulator("#sku-table",{
   height:"520px",
   data:[],
   layout:"fitColumns",
   reactiveData:true,
-  columns: defaultColumns,
+  columns:defaultColumns,
   placeholder:"Đang nạp dữ liệu...",
-  cellEdited:()=> sourceData = table.getData(),
+  cellEdited:()=>sourceData=table.getData(),
 });
 
-let sourceData = [];
-let currentColumns = defaultColumns.map(c=>c.field);
-let displayedData = [];
-
-/* ====== Formatter & Event cho nút Xóa dòng ====== */
-function deleteIcon(){
-  return "<button class='del-btn'>Xóa</button>";
-}
-function deleteRow(e, cell){
-  const row = cell.getRow();
-  const index = displayedData.indexOf(row.getData());
-  if(index > -1){
-    displayedData.splice(index, 1);
-    row.delete();
-    showMessage("🗑 Đã xóa 1 dòng khỏi bảng hiển thị.");
-  }
-}
+let sourceData=[];
+let currentColumns=defaultColumns.map(c=>c.field);
+let displayedData=[];
 
 /* ====== Hỗ trợ ====== */
-function normalizeKey(k){ return String(k||'').trim(); }
-function setTableColumnsFromKeys(keys){
-  const cols = [{title:"🗑", formatter:deleteIcon, width:60, hozAlign:"center", headerSort:false, cellClick:deleteRow}]
-    .concat(keys.map(k=>({title:k, field:k, editor:"input"})));
-  table.setColumns(cols);
-  currentColumns = keys.slice();
-}
+function normalizeKey(k){return String(k||'').trim();}
 function showMessage(msg,isError=false){
   const el=document.getElementById('message');
   el.textContent=msg;
   el.style.color=isError?"#b91c1c":"#334155";
 }
+function refreshSTT(){
+  table.redraw(true);
+}
 
-/* ====== Nạp dữ liệu ====== */
+/* ====== Thiết lập bảng ====== */
 function setTableData(arr){
-  sourceData = arr.map(r=>{
+  sourceData=arr.map(r=>{
     const out={};
-    Object.keys(r).forEach(k=> out[normalizeKey(k)] = r[k]==null ? '' : String(r[k]));
+    Object.keys(r).forEach(k=>out[normalizeKey(k)]=r[k]==null?"":String(r[k]));
     return out;
   });
-  const keys = sourceData.length ? Object.keys(sourceData[0]) : currentColumns;
-  setTableColumnsFromKeys(keys);
+  const keys=sourceData.length?Object.keys(sourceData[0]):currentColumns;
   table.clearData();
   displayedData=[];
   table.setData(sourceData);
@@ -130,7 +126,7 @@ function setTableData(arr){
   showMessage("✅ Đã tải "+arr.length+" dòng từ Google Sheets — sẵn sàng tra cứu!");
 }
 
-/* ====== Đọc file Excel hoặc CSV ====== */
+/* ====== Load file hoặc Google Sheets ====== */
 function loadFile(file){
   const reader=new FileReader();
   const name=(file.name||'').toLowerCase();
@@ -138,35 +134,35 @@ function loadFile(file){
     try{
       let arr;
       if(name.endsWith(".csv")){
-        arr=XLSX.utils.sheet_to_json(XLSX.read(e.target.result,{type:"string"}).Sheets[XLSX.read(e.target.result,{type:"string"}).SheetNames[0]],{defval:""});
+        const wb=XLSX.read(e.target.result,{type:"string"});
+        arr=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});
       }else{
         const wb=XLSX.read(e.target.result,{type:"array"});
         arr=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});
       }
       setTableData(arr);
     }catch(err){
-      console.error(err);
       showMessage("Lỗi khi đọc file: "+err.message,true);
     }
   };
-  if(name.endsWith(".csv")) reader.readAsText(file,"utf-8");
+  if(name.endsWith(".csv"))reader.readAsText(file,"utf-8");
   else reader.readAsArrayBuffer(file);
 }
 
-/* ====== Nạp dữ liệu từ Google Sheets ====== */
 function loadFromGoogleSheet(){
-  const sheetURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv"; // 👉 Thay bằng link CSV thật
+  const sheetURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv";
   showMessage("🔄 Đang tải dữ liệu từ Google Sheets...");
   fetch(sheetURL)
     .then(r=>r.text())
     .then(txt=>{
-      const data=XLSX.utils.sheet_to_json(XLSX.read(txt,{type:"string"}).Sheets[XLSX.read(txt,{type:"string"}).SheetNames[0]],{defval:""});
+      const wb=XLSX.read(txt,{type:"string"});
+      const data=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});
       setTableData(data);
     })
     .catch(err=>showMessage("❌ Lỗi tải Google Sheets: "+err,true));
 }
 
-/* ====== Tìm kiếm (cho phép SKU trùng) ====== */
+/* ====== Tìm kiếm (cộng dồn) ====== */
 function doSearch(){
   const q=document.getElementById('searchBox').value.trim().toLowerCase();
   if(!sourceData.length){showMessage("Chưa có dữ liệu!",true);return;}
@@ -176,15 +172,16 @@ function doSearch(){
     displayedData=displayedData.concat(filtered);
     table.setData(displayedData);
     document.getElementById('table-holder').style.display='block';
+    refreshSTT();
     showMessage("Đã thêm "+filtered.length+" dòng (tổng: "+displayedData.length+")");
   }else showMessage("Không tìm thấy SKU nào khớp '"+q+"'",true);
   document.getElementById('searchBox').value="";
 }
 
-/* ====== Nút chức năng ====== */
+/* ====== Các nút ====== */
 document.getElementById('loadFileBtn').addEventListener('click',()=>{
   const f=document.getElementById('fileInput').files[0];
-  if(!f) loadFromGoogleSheet(); else loadFile(f);
+  if(!f)loadFromGoogleSheet();else loadFile(f);
 });
 document.getElementById('searchBtn').addEventListener('click',doSearch);
 document.getElementById('searchBox').addEventListener('keydown',e=>{
@@ -195,8 +192,8 @@ document.getElementById('addRowBtn').addEventListener('click',()=>{
   table.addRow(empty,true).then(row=>{
     displayedData.push(empty);
     sourceData.push(empty);
+    refreshSTT();
     showMessage("Đã thêm dòng mới. Nhập dữ liệu và Enter để lưu.");
-    row.getCell(currentColumns[0])?.edit(true);
   });
   document.getElementById('table-holder').style.display='block';
 });
@@ -206,20 +203,18 @@ document.getElementById('clearTableBtn').addEventListener('click',()=>{
   showMessage("🧹 Đã xóa bảng. Đang tải lại dữ liệu gốc...");
   setTimeout(loadFromGoogleSheet,600);
 });
-
-/* ====== 📘 Xuất Excel (.xlsx) ====== */
 document.getElementById('downloadXLSXBtn').addEventListener('click',()=>{
   displayedData=table.getData();
   if(!displayedData.length){showMessage("Không có dữ liệu để tải",true);return;}
-  const ws = XLSX.utils.json_to_sheet(displayedData);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Data");
-  XLSX.writeFile(wb, "BKM_export.xlsx");
+  const ws=XLSX.utils.json_to_sheet(displayedData);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Data");
+  XLSX.writeFile(wb,"BKM_export.xlsx");
   showMessage("✅ Đã xuất file Excel thành công!");
 });
 
-/* ====== 🔄 Tự động load khi mở trang ====== */
-window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
+/* ====== Tự động load ====== */
+window.addEventListener('DOMContentLoaded',loadFromGoogleSheet);
 </script>
 </body>
 </html>
