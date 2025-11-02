@@ -38,12 +38,12 @@
       <button id="addRowBtn" class="secondary">➕ Thêm dòng</button>
       <button id="clearTableBtn" class="secondary">🧹 Xóa bảng</button>
       <button id="downloadCSVBtn">⬇ Tải về CSV</button>
-      <div id="message">Mở lần đầu cần Internet để tải thư viện, sau đó có thể dùng offline.</div>
+      <div id="message">Đang tải dữ liệu từ Google Sheets...</div>
     </div>
 
     <div class="hint">
-      1) Nạp file hoặc để web tự tải Google Sheets → 
-      2) Nhập từ khóa & Enter để tìm (cộng dồn, cho phép SKU trùng) → 
+      1) Web tự nạp dữ liệu Google Sheets khi mở trang →
+      2) Nhập từ khóa & Enter để tìm (cộng dồn, cho phép SKU trùng) →
       3) Sửa, thêm dòng trực tiếp → 
       4) Xóa bảng nếu muốn làm mới.
     </div>
@@ -75,13 +75,13 @@ let table = new Tabulator("#sku-table", {
   layout:"fitColumns",
   reactiveData:true,
   columns: defaultColumns,
-  placeholder:"Chưa nạp dữ liệu. Bấm Nạp file hoặc tải từ Google Sheets",
+  placeholder:"Đang nạp dữ liệu...",
   cellEdited:()=> sourceData = table.getData(),
 });
 
 let sourceData = [];
 let currentColumns = defaultColumns.map(c=>c.field);
-let displayedData = []; // dữ liệu đang hiển thị (cộng dồn)
+let displayedData = [];
 
 /* ====== Hỗ trợ ====== */
 function normalizeKey(k){ return String(k||'').trim(); }
@@ -107,8 +107,9 @@ function setTableData(arr){
   setTableColumnsFromKeys(keys);
   table.clearData();
   displayedData=[];
-  document.getElementById('table-holder').style.display='none';
-  showMessage("Đã nạp dữ liệu: "+arr.length+" dòng. Nhập từ khóa & Enter để tìm (cộng dồn).");
+  table.setData(sourceData);
+  document.getElementById('table-holder').style.display='block';
+  showMessage("✅ Đã tải "+arr.length+" dòng từ Google Sheets — sẵn sàng tra cứu!");
 }
 
 function loadFile(file){
@@ -134,14 +135,13 @@ function loadFile(file){
 }
 
 function loadFromGoogleSheet(){
-  const sheetURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv"; // 👉 Thay bằng link CSV của bạn
+  const sheetURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv"; // 👉 Thay bằng link CSV Google Sheet của bạn
+  showMessage("🔄 Đang tải dữ liệu từ Google Sheets...");
   fetch(sheetURL)
     .then(r=>r.text())
     .then(txt=>{
       const data=XLSX.utils.sheet_to_json(XLSX.read(txt,{type:"string"}).Sheets[XLSX.read(txt,{type:"string"}).SheetNames[0]],{defval:""});
       setTableData(data);
-      document.getElementById('table-holder').style.display='block';
-      showMessage("✅ Đã nạp dữ liệu online từ Google Sheets ("+data.length+" dòng)");
     })
     .catch(err=>showMessage("❌ Lỗi tải Google Sheets: "+err,true));
 }
@@ -149,18 +149,15 @@ function loadFromGoogleSheet(){
 /* ====== Tìm kiếm (cho phép SKU trùng) ====== */
 function doSearch(){
   const q=document.getElementById('searchBox').value.trim().toLowerCase();
-  if(!sourceData.length){showMessage("Chưa có dữ liệu! Hãy nạp file trước.",true);return;}
+  if(!sourceData.length){showMessage("Chưa có dữ liệu!",true);return;}
   if(!q){showMessage("Ô tìm kiếm trống — giữ nguyên dữ liệu hiện có.");return;}
-
   const filtered=sourceData.filter(row=>Object.values(row).some(v=>String(v||'').toLowerCase().includes(q)));
-
   if(filtered.length){
-    displayedData=displayedData.concat(filtered); // ✅ không loại SKU trùng
+    displayedData=displayedData.concat(filtered);
     table.setData(displayedData);
     document.getElementById('table-holder').style.display='block';
     showMessage("Đã thêm "+filtered.length+" dòng (tổng: "+displayedData.length+")");
   }else showMessage("Không tìm thấy SKU nào khớp '"+q+"'",true);
-
   document.getElementById('searchBox').value="";
 }
 
@@ -186,7 +183,8 @@ document.getElementById('addRowBtn').addEventListener('click',()=>{
 document.getElementById('clearTableBtn').addEventListener('click',()=>{
   table.clearData();
   displayedData=[];
-  showMessage("🧹 Đã xóa toàn bộ dữ liệu hiển thị.");
+  showMessage("🧹 Đã xóa bảng. Đang tải lại dữ liệu gốc...");
+  setTimeout(loadFromGoogleSheet,600);
 });
 document.getElementById('downloadCSVBtn').addEventListener('click',()=>{
   displayedData=table.getData();
@@ -201,6 +199,9 @@ document.getElementById('downloadCSVBtn').addEventListener('click',()=>{
   document.body.appendChild(a);a.click();a.remove();
   showMessage("✅ Đã xuất CSV thành công");
 });
+
+/* ====== 🔄 Tự động load dữ liệu khi mở trang ====== */
+window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
 </script>
 </body>
 </html>
