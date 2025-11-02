@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tra cứu SKU — Offline (nạp Excel)</title>
+
+  <!-- Tabulator -->
+  <link href="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+
+  <!-- SheetJS -->
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial; background:#f5f7f8; margin:0; padding:18px}
+    .wrap{max-width:1200px;margin:0 auto;background:#fff;padding:16px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,0.06)}
+    h1{margin:0 0 12px 0;font-size:20px;color:#0f766e}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+    input[type="text"], input[type="file"], button {padding:8px;border-radius:6px;border:1px solid #ccc}
+    button {background:#0ea5a4;color:#fff;border:0;cursor:pointer}
+    button.secondary{background:#64748b}
+    #message{color:#334155;margin-left:8px;font-size:13px}
+    #table-holder{margin-top:8px}
+    @media(max-width:720px){ .controls{flex-direction:column;align-items:stretch} }
+    .hint{font-size:13px;color:#566574;margin-top:6px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Quản lý & Tra cứu SKU — Offline</h1>
+
+    <div class="controls">
+      <input id="searchBox" type="text" placeholder="Nhập SKU / Tên hàng / Nhãn hiệu..." style="min-width:300px" />
+      <button id="searchBtn" class="secondary">🔍 Tìm kiếm</button>
+      <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
+      <button id="loadFileBtn">Nạp file</button>
+      <button id="addRowBtn" class="secondary">➕ Thêm dòng</button>
+      <button id="downloadCSVBtn">⬇ Tải về CSV</button>
+      <div id="message">Mở lần đầu cần Internet để tải thư viện, sau đó có thể dùng offline.</div>
+    </div>
+
+    <div class="hint">1) Nạp file → 2) Nhập từ khóa & Enter để tìm (cộng dồn) → 3) Sửa hoặc thêm dòng trực tiếp.</div>
+
+    <div id="table-holder" style="margin-top:12px; display:none;">
+      <div id="sku-table"></div>
+    </div>
+  </div>
+
+<script>
+/* ====== Cấu hình cột mặc định ====== */
+const defaultColumns = [
+  {title:"NH", field:"NH", editor:"input", width:70},
+  {title:"SKU", field:"SKU", editor:"input"},
+  {title:"Nhãn Hiệu", field:"NhanHieu", editor:"input"},
+  {title:"Tên Hàng", field:"TenHang", editor:"input", width:300},
+  {title:"Mô Tả", field:"MoTa", editor:"input", width:250},
+  {title:"Quy Cách", field:"QuyCach", editor:"input"},
+  {title:"Giá Bán", field:"GiaBan", editor:"input"},
+  {title:"Giá Gốc", field:"GiaGoc", editor:"input"},
+  {title:"Quà Tặng", field:"QuaTang", editor:"input"},
+  {title:"Áp Dụng", field:"ApDung", editor:"input"},
+  {title:"Ngày Nhập", field:"NgayNhap", editor:"input"}
+];
+
+let table = new Tabulator("#sku-table", {
+  height:"520px",
+  data:[],
+  layout:"fitColumns",
+  reactiveData:true,
+  columns: defaultColumns,
+  placeholder:"Chưa nạp dữ liệu. Bấm Nạp file để chọn Excel/CSV",
+  cellEdited:()=> sourceData = table.getData(),
+});
+
+let sourceData = [];
+let currentColumns = defaultColumns.map(c=>c.field);
+let displayedData = []; // dữ liệu đang hiển thị (để cộng dồn)
+
+/* ====== Xử lý file ====== */
+function normalizeKey(k){ return String(k||'').trim(); }
+function setTableColumnsFromKeys(keys){
+  const cols = keys.map(k=>({title:k, field:k, editor:"input"}));
+  table.setColumns(cols);
+  currentColumns = keys.slice();
+}
+
+function setTableData(arr){
+  sourceData = arr.map(r=>{
+    const out = {};
+    Object.keys(r).forEach(k=>{
+      out[normalizeKey(k)] = r[k]===null || r[k]===undefined ? '' : String(r[k]);
+    });
+    return out;
+  });
+  const keys = sourceData.length ? Object.keys(sourceData[0]) : currentColumns;
+  setTableColumnsFromKeys(keys);
+  table.clearData();
+  displayedData = [];
+  document.getElementById('table-holder').style.display = 'none';
+  showMessage("Đã nạp dữ liệu: " + arr.length + " dòng. Nhập từ khóa & Enter để tìm (cộng dồn).");
+}
+
+function arrayBufferToWorkbook(ab){ return XLSX.read(ab, {type:"array"}); }
+function workbookToJson(wb){
+  const sheetName = wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  return XLSX.utils.sheet_to_json(ws, {defval:""});
+}
+function parseCsvText(text){
+  const wb = XLSX.read(text, {type:"string"});
+  return workbookToJson(wb);
+}
+function loadFile(file){
+  const reader = new FileReader();
+  const name = (file.name||'').toLowerCase();
+  reader.onload = function(e){
+    try{
+      let arr;
+      if(name.endsWith(".csv")){
+        arr = parseCsvText(e.target.result);
+      } else {
+        const wb = arrayBufferToWorkbook(e.target.result);
+        arr = workbookToJson(wb);
+      }
+      setTableData(arr);
+    }catch(err){
+      console.error(err);
+      showMessage("Lỗi khi đọc file: " + err.message, true);
+    }
+  };
+  if(name.endsWith(".csv")) reader.readAsText(file, "utf-8");
+  else reader.readAsArrayBuffer(file);
+}
+
+/* ====== Tìm kiếm (cộng dồn) ====== */
+function normalizeVal(v){ return String(v||'').toLowerCase(); }
+
+function doSearch(){
+  const q = document.getElementById('searchBox').value.trim().toLowerCase();
+  if(!sourceData.length){ showMessage("Chưa có dữ liệu! Hãy nạp file trước.", true); return; }
+  if(!q){ 
+    showMessage("Ô tìm kiếm trống — giữ nguyên dữ liệu hiện có."); 
+    return; 
+  }
+
+  const filtered = sourceData.filter(row =>
+    Object.values(row).some(v => normalizeVal(v).includes(q))
+  );
+
+  if(filtered.length){
+    // Cộng dồn: thêm các dòng chưa có SKU trùng
+    const currentSkus = new Set(displayedData.map(r => r.SKU));
+    const newRows = filtered.filter(r => !currentSkus.has(r.SKU));
+    displayedData = displayedData.concat(newRows);
+    table.setData(displayedData);
+    document.getElementById('table-holder').style.display = 'block';
+    showMessage("Đã thêm " + newRows.length + " dòng (tổng: " + displayedData.length + ")");
+  }else{
+    showMessage("Không tìm thấy SKU nào khớp '" + q + "'", true);
+  }
+  document.getElementById('searchBox').value = ""; // tự clear ô tìm kiếm
+}
+
+document.getElementById('searchBtn').addEventListener('click', doSearch);
+document.getElementById('searchBox').addEventListener('keydown', function(e){
+  if(e.key === "Enter"){ e.preventDefault(); doSearch(); }
+});
+
+/* ====== Thêm dòng ====== */
+document.getElementById('addRowBtn').addEventListener('click', function(){
+  const empty = {};
+  (currentColumns.length ? currentColumns : defaultColumns.map(c=>c.field)).forEach(k=> empty[k]='');
+  table.addRow(empty, true).then((row)=>{
+    displayedData.push(empty);
+    sourceData.push(empty);
+    showMessage("Đã thêm dòng mới. Nhập dữ liệu và Enter để lưu.");
+    const firstCell = row.getCell(currentColumns[0]);
+    if(firstCell){ firstCell.edit(true); }
+  });
+  document.getElementById('table-holder').style.display = 'block';
+});
+
+/* ====== Xuất CSV ====== */
+function downloadCurrentCSV(filename = "BKM_export.csv"){
+  if(!displayedData.length){ showMessage("Không có dữ liệu để tải", true); return; }
+  const keys = Object.keys(displayedData[0]);
+  const rows = [keys.join(",")].concat(displayedData.map(r => keys.map(k => '"' + (String(r[k]||'')).replace(/"/g,'""') + '"').join(",")));
+  const csv = rows.join("\n");
+  const bom = "\uFEFF"; // thêm BOM UTF-8 để Excel nhận đúng font
+  const blob = new Blob([bom + csv], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showMessage("Đã xuất CSV: " + filename);
+}
+
+/* ====== Nút nạp/tải ====== */
+document.getElementById('loadFileBtn').addEventListener('click', function(){
+  const f = document.getElementById('fileInput').files[0];
+  if(!f){ showMessage("Vui lòng chọn file trước khi bấm Nạp file", true); return; }
+fetch("https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pubhtml?gid=623088832&single=true")
+  .then(r=>r.text())
+  .then(txt=>{
+    const arr = parseCsvText(txt);
+    setTableData(arr);
+    showMessage("Đã nạp dữ liệu online từ Google Sheets (" + arr.length + " dòng)");
+  });
+
+});
+document.getElementById('fileInput').addEventListener('change', function(){
+  const f = this.files[0];
+  if(f) showMessage("File đã chọn: " + f.name);
+});
+document.getElementById('downloadCSVBtn').addEventListener('click', function(){
+  displayedData = table.getData();
+  downloadCurrentCSV();
+});
+
+/* ====== Thông báo ====== */
+function showMessage(msg, isError=false){
+  const el = document.getElementById('message');
+  el.textContent = msg;
+  el.style.color = isError ? "#b91c1c" : "#334155";
+}
+</script>
+</body>
+</html>
