@@ -200,15 +200,21 @@ function downloadCurrentCSV(filename = "BKM_export.csv"){
 /* ====== Nút nạp/tải ====== */
 document.getElementById('loadFileBtn').addEventListener('click', function(){
   const f = document.getElementById('fileInput').files[0];
-  if(!f){ showMessage("Vui lòng chọn file trước khi bấm Nạp file", true); return; }
-fetch("https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pubhtml?gid=623088832&single=true")
-  .then(r=>r.text())
-  .then(txt=>{
-    const arr = parseCsvText(txt);
-    setTableData(arr);
-    showMessage("Đã nạp dữ liệu online từ Google Sheets (" + arr.length + " dòng)");
-  });
-
+  if(!f){
+    // Nếu không chọn file thì tự động nạp từ Google Sheets
+    const sheetURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv";
+    fetch(sheetURL)
+      .then(r => r.text())
+      .then(txt => {
+        const wb = XLSX.read(txt, {type:"string"});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const arr = XLSX.utils.sheet_to_json(ws, {defval:""});
+        setTableData(arr);
+        showMessage("✅ Đã nạp dữ liệu online từ Google Sheets (" + arr.length + " dòng)");
+      })
+      .catch(err => showMessage("❌ Lỗi tải Google Sheets: " + err, true));
+    return;
+  }
 });
 document.getElementById('fileInput').addEventListener('change', function(){
   const f = this.files[0];
