@@ -24,6 +24,8 @@
     #table-holder{margin-top:8px}
     @media(max-width:720px){.controls{flex-direction:column;align-items:stretch}}
     .hint{font-size:13px;color:#566574;margin-top:6px}
+    .del-btn{background:#dc2626;color:#fff;border:none;border-radius:5px;padding:4px 8px;cursor:pointer}
+    .del-btn:hover{background:#b91c1c}
   </style>
 </head>
 <body>
@@ -44,7 +46,7 @@
     <div class="hint">
       1) Web tự nạp dữ liệu Google Sheets khi mở trang →
       2) Nhập từ khóa & Enter để tìm (cộng dồn, cho phép SKU trùng) →
-      3) Sửa, thêm dòng trực tiếp →
+      3) Sửa, thêm dòng, hoặc 🗑 xóa dòng sai →
       4) Xuất Excel hoặc Xóa bảng để tải lại.
     </div>
 
@@ -56,6 +58,7 @@
 <script>
 /* ====== Cấu hình bảng ====== */
 const defaultColumns = [
+  {title:"🗑", formatter:deleteIcon, width:60, hozAlign:"center", headerSort:false, cellClick:deleteRow},
   {title:"NH", field:"NH", editor:"input", width:70},
   {title:"SKU", field:"SKU", editor:"input"},
   {title:"Nhãn Hiệu", field:"NhanHieu", editor:"input"},
@@ -83,10 +86,25 @@ let sourceData = [];
 let currentColumns = defaultColumns.map(c=>c.field);
 let displayedData = [];
 
+/* ====== Formatter & Event cho nút Xóa dòng ====== */
+function deleteIcon(){
+  return "<button class='del-btn'>Xóa</button>";
+}
+function deleteRow(e, cell){
+  const row = cell.getRow();
+  const index = displayedData.indexOf(row.getData());
+  if(index > -1){
+    displayedData.splice(index, 1);
+    row.delete();
+    showMessage("🗑 Đã xóa 1 dòng khỏi bảng hiển thị.");
+  }
+}
+
 /* ====== Hỗ trợ ====== */
 function normalizeKey(k){ return String(k||'').trim(); }
 function setTableColumnsFromKeys(keys){
-  const cols = keys.map(k=>({title:k, field:k, editor:"input"}));
+  const cols = [{title:"🗑", formatter:deleteIcon, width:60, hozAlign:"center", headerSort:false, cellClick:deleteRow}]
+    .concat(keys.map(k=>({title:k, field:k, editor:"input"})));
   table.setColumns(cols);
   currentColumns = keys.slice();
 }
@@ -137,7 +155,7 @@ function loadFile(file){
 
 /* ====== Nạp dữ liệu từ Google Sheets ====== */
 function loadFromGoogleSheet(){
-  const sheetURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv"; // 👉 Thay bằng link CSV thật của bạn
+  const sheetURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv"; // 👉 Thay bằng link CSV thật
   showMessage("🔄 Đang tải dữ liệu từ Google Sheets...");
   fetch(sheetURL)
     .then(r=>r.text())
