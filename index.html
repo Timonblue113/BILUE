@@ -37,15 +37,15 @@
       <button id="loadFileBtn">Nạp file</button>
       <button id="addRowBtn" class="secondary">➕ Thêm dòng</button>
       <button id="clearTableBtn" class="secondary">🧹 Xóa bảng</button>
-      <button id="downloadCSVBtn">⬇ Tải về CSV</button>
+      <button id="downloadXLSXBtn">⬇ Xuất Excel</button>
       <div id="message">Đang tải dữ liệu từ Google Sheets...</div>
     </div>
 
     <div class="hint">
       1) Web tự nạp dữ liệu Google Sheets khi mở trang →
       2) Nhập từ khóa & Enter để tìm (cộng dồn, cho phép SKU trùng) →
-      3) Sửa, thêm dòng trực tiếp → 
-      4) Xóa bảng nếu muốn làm mới.
+      3) Sửa, thêm dòng trực tiếp →
+      4) Xuất Excel hoặc Xóa bảng để tải lại.
     </div>
 
     <div id="table-holder" style="margin-top:12px; display:none;">
@@ -54,7 +54,7 @@
   </div>
 
 <script>
-/* ====== Cấu hình cột mặc định ====== */
+/* ====== Cấu hình bảng ====== */
 const defaultColumns = [
   {title:"NH", field:"NH", editor:"input", width:70},
   {title:"SKU", field:"SKU", editor:"input"},
@@ -112,6 +112,7 @@ function setTableData(arr){
   showMessage("✅ Đã tải "+arr.length+" dòng từ Google Sheets — sẵn sàng tra cứu!");
 }
 
+/* ====== Đọc file Excel hoặc CSV ====== */
 function loadFile(file){
   const reader=new FileReader();
   const name=(file.name||'').toLowerCase();
@@ -134,8 +135,9 @@ function loadFile(file){
   else reader.readAsArrayBuffer(file);
 }
 
+/* ====== Nạp dữ liệu từ Google Sheets ====== */
 function loadFromGoogleSheet(){
-  const sheetURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv"; // 👉 Thay bằng link CSV Google Sheet của bạn
+  const sheetURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv"; // 👉 Thay bằng link CSV thật của bạn
   showMessage("🔄 Đang tải dữ liệu từ Google Sheets...");
   fetch(sheetURL)
     .then(r=>r.text())
@@ -186,21 +188,19 @@ document.getElementById('clearTableBtn').addEventListener('click',()=>{
   showMessage("🧹 Đã xóa bảng. Đang tải lại dữ liệu gốc...");
   setTimeout(loadFromGoogleSheet,600);
 });
-document.getElementById('downloadCSVBtn').addEventListener('click',()=>{
+
+/* ====== 📘 Xuất Excel (.xlsx) ====== */
+document.getElementById('downloadXLSXBtn').addEventListener('click',()=>{
   displayedData=table.getData();
   if(!displayedData.length){showMessage("Không có dữ liệu để tải",true);return;}
-  const keys=Object.keys(displayedData[0]);
-  const rows=[keys.join(",")].concat(displayedData.map(r=>keys.map(k=>'"'+(String(r[k]||'')).replace(/"/g,'""')+'"').join(",")));
-  const csv="\uFEFF"+rows.join("\n");
-  const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download="BKM_export.csv";
-  document.body.appendChild(a);a.click();a.remove();
-  showMessage("✅ Đã xuất CSV thành công");
+  const ws = XLSX.utils.json_to_sheet(displayedData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Data");
+  XLSX.writeFile(wb, "BKM_export.xlsx");
+  showMessage("✅ Đã xuất file Excel thành công!");
 });
 
-/* ====== 🔄 Tự động load dữ liệu khi mở trang ====== */
+/* ====== 🔄 Tự động load khi mở trang ====== */
 window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
 </script>
 </body>
