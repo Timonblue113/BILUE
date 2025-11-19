@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Tra cứu SKU — Online & Offline</title>
+  <title>Tra cứu SKU — Online & Offline + Scan UPC</title>
 
   <!-- Tabulator -->
   <link href="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
@@ -12,86 +12,101 @@
   <!-- SheetJS -->
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
-  <!-- Camera Scanner -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+  <!-- ZXING Barcode Scanner -->
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
 
   <style>
     body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#f5f7f8;margin:0;padding:18px}
     .wrap{max-width:1200px;margin:0 auto;background:#fff;padding:16px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,0.06)}
     h1{margin:0 0 12px 0;font-size:20px;color:#0f766e}
     .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-    input[type="text"],input[type="file"],button{padding:8px;border-radius:6px;border:1px solid #ccc}
+    input[type="text"],input[type="file"],button,select{padding:8px;border-radius:6px;border:1px solid #ccc}
     button{background:#0ea5a4;color:#fff;border:0;cursor:pointer}
     button.secondary{background:#64748b}
     #message{color:#334155;margin-left:8px;font-size:13px}
     #table-holder{margin-top:8px}
     @media(max-width:720px){.controls{flex-direction:column;align-items:stretch}}
-    .hint{font-size:13px;color:#566574;margin-top:6px}
-    .del-btn{background:#dc2626;color:#fff;border:none;border-radius:5px;padding:4px 8px;cursor:pointer}
-    .del-btn:hover{background:#b91c1c}
+
+    /* Viền xanh khi quét thành công */
+    #cameraView.success {
+      outline: 4px solid #22c55e;
+      transition: outline 0.15s ease-in-out;
+    }
+
+    /* Popup camera */
+    #camera-modal{
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);
+      backdrop-filter:blur(3px);z-index:9999;
+      justify-content:center;align-items:center;
+    }
   </style>
 </head>
-
 <body>
-<div class="wrap">
-  <h1>Quản lý & Tra cứu SKU — Online/Offline</h1>
 
-  <audio id="beepSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+<audio id="beepSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
+
+<div class="wrap">
+  <h1>Quản lý & Tra cứu SKU — Online/Offline + Scan UPC</h1>
 
   <div class="controls">
-      <input id="searchBox" type="text" placeholder="Nhập SKU / Tên hàng / Nhãn hiệu..." style="min-width:300px" />
-      <input id="barcodeBox" type="text" placeholder="🧾 Quét barcode 7 / 13 số..." style="min-width:220px" />
+    <input id="searchBox" type="text" placeholder="Nhập SKU / Tên hàng..." style="min-width:260px" />
+    <button id="searchBtn" class="secondary">🔍 Tìm</button>
 
-      <button id="searchBtn" class="secondary">🔍</button>
-      <button id="camScanBtn">📷 Camera</button>
+    <input id="barcodeBox" type="text" placeholder="Quét mã UPC..." style="min-width:160px" />
 
-      <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
-      <button id="loadFileBtn">Nạp file</button>
+    <select id="cameraSelect">
+      <option value="">Chọn Camera…</option>
+    </select>
 
-      <button id="addRowBtn" class="secondary">➕ Thêm dòng</button>
-      <button id="clearTableBtn" class="secondary">🧹 Xóa bảng</button>
-      <button id="downloadXLSXBtn">⬇ Xuất Excel</button>
+    <button id="scanBtn">📸 Quét UPC</button>
 
-      <div id="message">Đang tải dữ liệu từ Google Sheets...</div>
+    <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
+    <button id="loadFileBtn">Nạp File</button>
+
+    <button id="addRowBtn" class="secondary">➕ Thêm dòng</button>
+    <button id="clearTableBtn" class="secondary">🧹 Xóa bảng</button>
+    <button id="downloadXLSXBtn">⬇ Excel</button>
+
+    <div id="message">Đang tải dữ liệu từ Google Sheets...</div>
   </div>
 
-  <div id="camera-area" style="display:none;margin-top:12px;">
-      <div id="camera-view" style="width:100%;max-width:400px;height:300px;border:2px solid #0ea5a4;"></div>
-      <button id="closeCamBtn" style="margin-top:8px;">Đóng Camera</button>
+  <div id="table-holder" style="display:none;">
+    <div id="sku-table"></div>
   </div>
+</div>
 
-  <div id="table-holder" style="margin-top:12px; display:none;">
-      <div id="sku-table"></div>
+<!-- POPUP CAMERA -->
+<div id="camera-modal">
+  <div style="background:#fff;padding:10px;border-radius:10px;text-align:center;">
+      <h3>📸 Quét mã UPC</h3>
+      <video id="cameraView" width="320" height="240" style="border-radius:6px;"></video>
+      <br>
+      <button id="closeCamBtn" style="margin-top:8px;">Đóng</button>
   </div>
 </div>
 
 <script>
-/* ====== DELETE BUTTON ====== */
+/* ====== XÓA ROW ====== */
 function deleteIcon(){return "<button class='del-btn'>Xóa</button>";}
 function deleteRow(e,cell){
-  const row = cell.getRow();
-  const index = displayedData.indexOf(row.getData());
-  if(index > -1){
-    displayedData.splice(index,1);
-    row.delete();
-    refreshSTT();
-    showMessage("🗑 Đã xóa 1 dòng.");
-  }
+  const row=cell.getRow();
+  const idx=displayedData.indexOf(row.getData());
+  if(idx>-1){displayedData.splice(idx,1);}
+  row.delete();
+  refreshSTT();
+  showMessage("🗑 Đã xóa 1 dòng");
 }
 
-/* ====== DEFAULT COLUMNS ====== */
+/* ====== CỘT ====== */
 const defaultColumns=[
   {title:"STT", formatter:"rownum", width:60, hozAlign:"center"},
   {title:"🗑", formatter:deleteIcon, width:60, hozAlign:"center", headerSort:false, cellClick:deleteRow},
-
   {title:"NH", field:"NH", editor:"input", width:70},
   {title:"SKU", field:"SKU", editor:"input"},
-
-  {title:"UPC", field:"UPC", editor:"input"},  // 🔥 NEW UPC COLUMN
-
+  {title:"UPC", field:"UPC", editor:"input"}, <!-- cột UPC -->
   {title:"Nhãn Hiệu", field:"NhanHieu", editor:"input"},
-  {title:"Tên Hàng", field:"TenHang", editor:"input", width:300},
-  {title:"Mô Tả", field:"MoTa", editor:"input", width:250},
+  {title:"Tên Hàng", field:"TenHang", editor:"input", width:260},
+  {title:"Mô Tả", field:"MoTa", editor:"input", width:200},
   {title:"Quy Cách", field:"QuyCach", editor:"input"},
   {title:"Giá Bán", field:"GiaBan", editor:"input"},
   {title:"Giá Gốc", field:"GiaGoc", editor:"input"},
@@ -101,142 +116,130 @@ const defaultColumns=[
 ];
 
 let table=new Tabulator("#sku-table",{
-  height:"520px",
-  data:[],
-  layout:"fitColumns",
-  reactiveData:true,
-  columns:defaultColumns,
-  placeholder:"Đang nạp dữ liệu...",
-  cellEdited:()=>sourceData=table.getData()
+  height:"520px", data:[], layout:"fitColumns",
+  reactiveData:true, columns:defaultColumns
 });
 
 let sourceData=[];
 let displayedData=[];
 
-/* ====== HELPER ====== */
-function playBeep(){
-  const snd=document.getElementById("beepSound");
-  snd.currentTime=0;
-  snd.play();
+/* ====== HỖ TRỢ ====== */
+function showMessage(msg,isErr=false){
+  const e=document.getElementById("message");
+  e.textContent=msg;
+  e.style.color=isErr?"#b91c1c":"#334155";
 }
-function showMessage(msg,isError=false){
-  const el=document.getElementById("message");
-  el.textContent=msg;
-  el.style.color=isError?"#b91c1c":"#334155";
-}
-function refreshSTT(){ table.redraw(true); }
+function refreshSTT(){table.redraw(true);}
 
-/* ====== SET DATA ====== */
+/* ====== TẢI GOOGLE SHEET ====== */
 function setTableData(arr){
-  sourceData = arr.map(r=>({ ...r }));
+  sourceData=arr.map(r=>({...r}));
   table.setData(sourceData);
   displayedData=[];
   document.getElementById("table-holder").style.display="block";
-  showMessage("✅ Đã tải " + arr.length + " dòng từ Google Sheets!");
+  showMessage("✅ Đã tải "+arr.length+" dòng!");
 }
-
-/* ====== LOAD GOOGLE SHEETS ====== */
 function loadFromGoogleSheet(){
-  const sheetURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv";
-  showMessage("🔄 Đang tải dữ liệu...");
-  fetch(sheetURL)
-    .then(r=>r.text())
-    .then(txt=>{
-      const wb=XLSX.read(txt,{type:"string"});
-      const data=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});
-      setTableData(data);
-    })
-    .catch(err=>showMessage("❌ Lỗi tải Sheets: "+err,true));
+  const url="https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv";
+  fetch(url).then(r=>r.text()).then(txt=>{
+    const wb=XLSX.read(txt,{type:"string"});
+    setTableData(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""}));
+  });
 }
 
-/* ====== AUTO SEARCH UPC → SKU → OTHER ====== */
-function barcodeSearch(code){
-  const val = String(code).trim(); // GIỮ SỐ 0 ĐẦU
+/* ====== TÌM ƯU TIÊN SKU → UPC → TOÀN BẢNG ====== */
+function searchByCode(code){
+  const c=String(code).trim();
 
-  if (!val) return;
+  let f = sourceData.filter(r=>String(r.SKU||"").trim()===c);
+  if(!f.length) f = sourceData.filter(r=>String(r.UPC||"").trim()===c);
+  if(!f.length) f = sourceData.filter(r=>Object.values(r).some(v=>String(v||"").trim()===c));
 
-  // ƯU TIÊN 1 — UPC
-  let filtered = sourceData.filter(r => String(r["UPC"]||"").trim() === val);
-
-  // ƯU TIÊN 2 — SKU
-  if (!filtered.length)
-    filtered = sourceData.filter(r => String(r["SKU"]||"").trim() === val);
-
-  // CUỐI CÙNG — Tìm mờ toàn bảng
-  if (!filtered.length){
-    const fields = ["TenHang","NhanHieu","MoTa","QuyCach"];
-    filtered = sourceData.filter(r =>
-      fields.some(f => String(r[f]||"").toLowerCase().includes(val.toLowerCase()))
-    );
-  }
-
-  if(filtered.length){
-    displayedData = displayedData.concat(filtered);
+  if(f.length){
+    displayedData = displayedData.concat(f);
     table.setData(displayedData);
-    document.getElementById("table-holder").style.display="block";
     refreshSTT();
-    playBeep();
-    showMessage("🔎 Tìm thấy " + filtered.length + " dòng.");
+    showMessage("🔍 Tìm thấy "+f.length+" dòng");
+    document.getElementById("beepSound").play().catch(()=>{});
   }else{
-    showMessage("❌ Không tìm thấy mã: " + val,true);
+    showMessage("❌ Không tìm thấy mã "+c,true);
   }
 }
 
-/* ====== INPUT BARCODE FIELD ====== */
-document.getElementById('barcodeBox').addEventListener('input', e=>{
-  const v = e.target.value.replace(/\D/g,""); // chỉ lấy số
-  e.target.value = v;
-
-  if (v.length === 7 || v.length === 13){
-    barcodeSearch(v);
-    e.target.value = "";
+/* ====== NHẬP UPC = AUTO TÌM ====== */
+document.getElementById("barcodeBox").addEventListener("input", e=>{
+  const v=e.target.value.replace(/\D/g,"");
+  e.target.value=v;
+  if(v.length===7 || v.length===12 || v.length===13){
+    searchByCode(v);
+    e.target.value="";
   }
 });
 
-/* ====== CAMERA SCAN ====== */
-document.getElementById("camScanBtn").addEventListener("click",()=>{
-  document.getElementById("camera-area").style.display="block";
+/* ====== TÌM THƯỜNG ====== */
+document.getElementById("searchBtn").addEventListener("click",()=>{
+  const q=document.getElementById("searchBox").value.trim().toLowerCase();
+  if(!q) return;
+  const f=sourceData.filter(r=>Object.values(r).some(v=>String(v).toLowerCase().includes(q)));
+  displayedData=f;
+  table.setData(displayedData);
+  refreshSTT();
+  showMessage("🔎 "+f.length+" kết quả");
+});
 
-  Quagga.init({
-    inputStream:{
-      type:"LiveStream",
-      target:document.querySelector('#camera-view'),
-      constraints:{facingMode:"environment"}
-    },
-    decoder:{readers:["ean_reader","ean_13_reader"]}
-  }, err=>{
-    if(err){ showMessage("Lỗi camera: "+err,true); return; }
-    Quagga.start();
+/* ====== CAMERA ====== */
+let codeReader=new ZXing.BrowserMultiFormatReader();
+let selectedDevice="";
+let scanning=false;
+
+ZXing.BrowserMultiFormatReader.listVideoInputDevices().then(dev=>{
+  const sel=document.getElementById("cameraSelect");
+  dev.forEach(d=>{
+    const o=document.createElement("option");
+    o.value=d.deviceId;
+    o.textContent=d.label||("Camera "+sel.length);
+    sel.appendChild(o);
   });
+});
 
-  Quagga.onDetected(data=>{
-    const code = data.codeResult.code;
-    playBeep();
-    barcodeSearch(code);
-    Quagga.stop();
-    document.getElementById("camera-area").style.display="none";
+document.getElementById("cameraSelect").addEventListener("change", e=>{
+  selectedDevice=e.target.value;
+  if(scanning){stopScan(); startScan();}
+});
+
+document.getElementById("scanBtn").addEventListener("click", ()=>{
+  document.getElementById("camera-modal").style.display="flex";
+  startScan();
+});
+
+function startScan(){
+  scanning=true;
+  const video=document.getElementById("cameraView");
+
+  codeReader.decodeFromVideoDevice(selectedDevice, video,(result,err)=>{
+    if(result){
+      const code=result.text.trim();
+
+      video.classList.add("success");
+      setTimeout(()=>video.classList.remove("success"),150);
+
+      document.getElementById("beepSound").play().catch(()=>{});
+
+      searchByCode(code);
+    }
   });
-});
+}
 
-document.getElementById("closeCamBtn").addEventListener("click",()=>{
-  Quagga.stop();
-  document.getElementById("camera-area").style.display="none";
-});
+document.getElementById("closeCamBtn").addEventListener("click", stopScan);
 
-/* ====== NÚT ====== */
-document.getElementById('searchBtn').addEventListener('click',()=>{
-  barcodeSearch(document.getElementById('searchBox').value);
-});
+function stopScan(){
+  scanning=false;
+  codeReader.reset();
+  document.getElementById("camera-modal").style.display="none";
+}
 
-document.getElementById('loadFileBtn').addEventListener('click',()=>{
-  const f=document.getElementById('fileInput').files[0];
-  if(!f) loadFromGoogleSheet(); 
-  else loadFile(f);
-});
-
-/* ====== AUTO LOAD ====== */
-window.addEventListener('DOMContentLoaded',loadFromGoogleSheet);
+/* ====== LOAD SHEET ====== */
+window.addEventListener("DOMContentLoaded",loadFromGoogleSheet);
 </script>
-
 </body>
 </html>
