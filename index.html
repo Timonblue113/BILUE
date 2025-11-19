@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tra cứu SKU & UPC</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tra cứu SKU — Online & Offline</title>
 
 <!-- Tabulator -->
 <link href="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
@@ -12,8 +12,8 @@
 <!-- SheetJS -->
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
-<!-- ZXing -->
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
+<!-- ZXing for scanning -->
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
 
 <style>
 body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#f5f7f8;margin:0;padding:18px}
@@ -25,17 +25,16 @@ button{background:#0ea5a4;color:#fff;border:0;cursor:pointer}
 button.secondary{background:#64748b}
 #message{color:#334155;margin-left:8px;font-size:13px}
 #table-holder{margin-top:8px}
-#video-container{margin-top:12px; display:none; position:relative; width:100%; max-width:400px;}
-video{width:100%; border:2px solid #ccc; border-radius:10px;}
-#video-container.success video{border-color:#22c55e;}
 @media(max-width:720px){.controls{flex-direction:column;align-items:stretch}}
 .hint{font-size:13px;color:#566574;margin-top:6px}
 .del-btn{background:#dc2626;color:#fff;border:none;border-radius:5px;padding:4px 8px;cursor:pointer}
 .del-btn:hover{background:#b91c1c}
+#video-container{position:relative;display:none;margin-top:12px;}
+#video-container video{width:100%;border:3px solid #ccc;border-radius:10px;}
+#video-container.success video{border-color:limegreen;}
 </style>
 </head>
 <body>
-
 <div class="wrap">
 <h1>Quản lý & Tra cứu SKU — Online/Offline</h1>
 
@@ -47,15 +46,15 @@ video{width:100%; border:2px solid #ccc; border-radius:10px;}
   <button id="addRowBtn" class="secondary">➕ Thêm dòng</button>
   <button id="clearTableBtn" class="secondary">🧹 Xóa bảng</button>
   <button id="downloadXLSXBtn">⬇ Xuất Excel</button>
-  <button id="scanUPCBtn" class="secondary">📷 Quét UPC</button>
+  <button id="scanBtn" class="secondary">📷 Scan UPC</button>
   <div id="message">Đang tải dữ liệu từ Google Sheets...</div>
 </div>
 
 <div class="hint">
-  1) Web tự nạp dữ liệu Google Sheets khi mở trang →<br>
-  2) Nhập từ khóa & Enter để tìm (cộng dồn, cho phép SKU trùng) →<br>
-  3) Sửa, thêm dòng, hoặc 🗑 xóa dòng sai →<br>
-  4) Quét UPC bằng camera, xuất Excel hoặc Xóa bảng để tải lại.
+1) Web tự nạp dữ liệu Google Sheets khi mở trang →<br>
+2) Nhập từ khóa & Enter để tìm (cộng dồn, cho phép SKU trùng) →<br>
+3) Sửa, thêm dòng, hoặc 🗑 xóa dòng sai →<br>
+4) Xuất Excel hoặc Xóa bảng để tải lại.
 </div>
 
 <div id="table-holder" style="margin-top:12px; display:none;">
@@ -63,16 +62,22 @@ video{width:100%; border:2px solid #ccc; border-radius:10px;}
 </div>
 
 <div id="video-container">
-  <video id="video" autoplay muted playsinline></video>
-  <button id="closeVideoBtn" style="position:absolute;top:5px;right:5px;padding:4px 8px;">✖</button>
+  <video id="video" muted playsinline></video>
 </div>
 </div>
 
 <script>
-/* ====== Tabulator setup ====== */
+/* ===== Tabulator setup ===== */
+function deleteIcon(){return "<button class='del-btn'>Xóa</button>";}
+function deleteRow(e,cell){
+  const row=cell.getRow();
+  const index=displayedData.indexOf(row.getData());
+  if(index>-1){displayedData.splice(index,1);row.delete();refreshSTT();showMessage("🗑 Đã xóa 1 dòng khỏi bảng hiển thị.");}
+}
+
 const defaultColumns=[
   {title:"STT", formatter:"rownum", width:60, hozAlign:"center"},
-  {title:"🗑", formatter:()=>"<button class='del-btn'>Xóa</button>", width:60, hozAlign:"center", headerSort:false, cellClick:(e,cell)=>{ const row=cell.getRow(); row.delete(); }},
+  {title:"🗑", formatter:deleteIcon, width:60, hozAlign:"center", headerSort:false, cellClick:deleteRow},
   {title:"NH", field:"NH", editor:"input", width:70},
   {title:"SKU", field:"SKU", editor:"input"},
   {title:"Nhãn Hiệu", field:"NhanHieu", editor:"input"},
@@ -87,69 +92,63 @@ const defaultColumns=[
   {title:"UPC", field:"UPC", editor:"input"}
 ];
 
-let table=new Tabulator("#sku-table",{ height:"520px", data:[], layout:"fitColumns", reactiveData:true, columns:defaultColumns });
-let sourceData=[]; let displayedData=[];
+let table=new Tabulator("#sku-table",{height:"520px",data:[],layout:"fitColumns",reactiveData:true,columns:defaultColumns,placeholder:"Đang nạp dữ liệu...",cellEdited:()=>sourceData=table.getData()});
+let sourceData=[],currentColumns=defaultColumns.map(c=>c.field),displayedData=[];
 
-/* ====== Google Sheet load ====== */
+function normalizeKey(k){return String(k||'').trim();}
+function showMessage(msg,isError=false){const el=document.getElementById('message');el.textContent=msg;el.style.color=isError?"#b91c1c":"#334155";}
+function refreshSTT(){table.redraw(true);}
+function setTableData(arr){sourceData=arr.map(r=>{const out={};Object.keys(r).forEach(k=>out[normalizeKey(k)]=r[k]==null?"":String(r[k]));return out;});table.clearData();displayedData=[];table.setData(sourceData);document.getElementById('table-holder').style.display='block';showMessage("✅ Đã tải "+arr.length+" dòng từ Google Sheets — sẵn sàng tra cứu!");}
+
+/* ===== Load Google Sheet ===== */
 function loadFromGoogleSheet(){
   const sheetURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv";
-  fetch(sheetURL)
-    .then(r=>r.text())
-    .then(txt=>{
-      const wb=XLSX.read(txt,{type:"string"});
-      const data=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});
-      sourceData=data;
-      table.setData(data); document.getElementById('table-holder').style.display='block';
-      document.getElementById('message').textContent="✅ Đã tải dữ liệu từ Google Sheets!";
-    })
-    .catch(err=>{document.getElementById('message').textContent="❌ Lỗi tải Google Sheets";});
+  showMessage("🔄 Đang tải dữ liệu từ Google Sheets...");
+  fetch(sheetURL).then(r=>r.text()).then(txt=>{const wb=XLSX.read(txt,{type:"string"});const data=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});setTableData(data);}).catch(err=>showMessage("❌ Lỗi tải Google Sheets: "+err,true));
 }
 
-window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
+/* ===== Load file ===== */
+function loadFile(file){const reader=new FileReader();const name=(file.name||'').toLowerCase();reader.onload=function(e){try{let arr;if(name.endsWith(".csv")){const wb=XLSX.read(e.target.result,{type:"string"});arr=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});}else{const wb=XLSX.read(e.target.result,{type:"array"});arr=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});}setTableData(arr);}catch(err){showMessage("Lỗi khi đọc file: "+err.message,true);}};if(name.endsWith(".csv"))reader.readAsText(file,"utf-8");else reader.readAsArrayBuffer(file);}
 
-/* ====== Search ====== */
-document.getElementById('searchBtn').addEventListener('click',()=>{ const q=document.getElementById('searchBox').value.trim().toLowerCase(); if(!q) return; const f=sourceData.filter(r=>Object.values(r).some(v=>String(v||'').toLowerCase().includes(q))); if(f.length){displayedData=f; table.setData(displayedData);} });
-document.getElementById('searchBox').addEventListener('keydown',e=>{ if(e.key==="Enter"){ e.preventDefault(); document.getElementById('searchBtn').click(); } });
+/* ===== Search ===== */
+function doSearch(){
+  const q=document.getElementById('searchBox').value.trim().toLowerCase();
+  if(!sourceData.length){showMessage("Chưa có dữ liệu!",true);return;}
+  if(!q){showMessage("Ô tìm kiếm trống — giữ nguyên dữ liệu hiện có.");return;}
+  const filtered=sourceData.filter(row=>Object.values(row).some(v=>String(v||'').toLowerCase().includes(q)));
+  if(filtered.length){displayedData=displayedData.concat(filtered);table.setData(displayedData);document.getElementById('table-holder').style.display='block';refreshSTT();showMessage("Đã thêm "+filtered.length+" dòng (tổng: "+displayedData.length+")");}
+  else showMessage("Không tìm thấy SKU nào khớp '"+q+"'",true);
+  document.getElementById('searchBox').value="";
+}
 
-/* ====== File load ====== */
-document.getElementById('loadFileBtn').addEventListener('click',()=>{
-  const f=document.getElementById('fileInput').files[0]; if(!f) loadFromGoogleSheet();
-  else { const reader=new FileReader(); reader.onload=e=>{ const wb=XLSX.read(e.target.result,{type:f.name.endsWith(".csv")?"string":"array"}); const data=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""}); sourceData=data; table.setData(data);} ; f.name.endsWith(".csv")?reader.readAsText(f,"utf-8"):reader.readAsArrayBuffer(f); }
+/* ===== Buttons ===== */
+document.getElementById('loadFileBtn').addEventListener('click',()=>{const f=document.getElementById('fileInput').files[0];if(!f)loadFromGoogleSheet();else loadFile(f);});
+document.getElementById('searchBtn').addEventListener('click',doSearch);
+document.getElementById('searchBox').addEventListener('keydown',e=>{if(e.key==="Enter"){e.preventDefault();doSearch();}});
+document.getElementById('addRowBtn').addEventListener('click',()=>{const empty={};currentColumns.forEach(k=>empty[k]='');table.addRow(empty,true).then(row=>{displayedData.push(empty);sourceData.push(empty);refreshSTT();showMessage("Đã thêm dòng mới. Nhập dữ liệu và Enter để lưu.");});document.getElementById('table-holder').style.display='block';});
+document.getElementById('clearTableBtn').addEventListener('click',()=>{table.clearData();displayedData=[];showMessage("🧹 Đã xóa bảng. Đang tải lại dữ liệu gốc...");setTimeout(loadFromGoogleSheet,600);});
+document.getElementById('downloadXLSXBtn').addEventListener('click',()=>{displayedData=table.getData();if(!displayedData.length){showMessage("Không có dữ liệu để tải",true);return;}const ws=XLSX.utils.json_to_sheet(displayedData);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Data");XLSX.writeFile(wb,"BKM_export.xlsx");showMessage("✅ Đã xuất file Excel thành công!");});
+
+/* ===== Scan UPC ===== */
+let codeReader=null, beep=new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+document.getElementById('scanBtn').addEventListener('click',()=>{
+  const videoContainer=document.getElementById('video-container');
+  videoContainer.style.display='block';
+  if(!codeReader){codeReader=new ZXing.BrowserMultiFormatReader();}
+  codeReader.listVideoInputDevices().then(devices=>{
+    const deviceId=devices.length>0?devices[0].deviceId:null;
+    codeReader.decodeOnceFromVideoDevice(deviceId,"video").then(result=>{
+      beep.play();
+      videoContainer.classList.add("success");
+      document.getElementById('searchBox').value=result.text;
+      doSearch();
+      setTimeout(()=>{videoContainer.style.display='none';videoContainer.classList.remove("success");},1500);
+    }).catch(err=>{showMessage("❌ Lỗi scan: "+err,true);});
+  });
 });
 
-/* ====== Scan UPC ====== */
-let codeReader=new ZXing.BrowserMultiFormatReader();
-let scanning=false;
-const video=document.getElementById('video');
-const videoContainer=document.getElementById('video-container');
-
-document.getElementById('scanUPCBtn').addEventListener('click',()=>{ startScan(); });
-document.getElementById('closeVideoBtn').addEventListener('click',()=>{ stopScan(); });
-
-function startScan(){
-  if(scanning) return;
-  scanning=true; videoContainer.style.display='block'; videoContainer.classList.remove('success');
-  ZXing.BrowserMultiFormatReader.listVideoInputDevices().then(devices=>{
-    const rear = devices.find(d=>d.label.toLowerCase().includes('back')) || devices[0];
-    codeReader.decodeFromVideoDevice(rear.deviceId, video, (result, err)=>{
-      if(result){
-        const upc=result.text.trim();
-        const found=sourceData.find(r=>r.UPC==upc || r.SKU==upc);
-        if(found){
-          displayedData=[found]; table.setData(displayedData);
-          videoContainer.classList.add('success');
-          new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg").play();
-          document.getElementById('message').textContent="📦 Đã tìm thấy mã: "+upc;
-        }
-      }
-    });
-  }).catch(err=>{document.getElementById('message').textContent="❌ Lỗi camera"; scanning=false; });
-}
-
-function stopScan(){
-  codeReader.reset(); scanning=false; videoContainer.style.display='none'; videoContainer.classList.remove('success');
-}
-
+/* ===== Auto load Google Sheet ===== */
+window.addEventListener('DOMContentLoaded',loadFromGoogleSheet);
 </script>
 </body>
 </html>
