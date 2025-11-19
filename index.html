@@ -239,7 +239,7 @@ document.getElementById('scanBtn').addEventListener('click', ()=>{
     let deviceId = devices.length>0?devices[devices.length-1].deviceId:null;
 
     navigator.mediaDevices.getUserMedia({
-      video:{ deviceId:{exact:deviceId}, facingMode:"environment", width:{ideal:1280}, height:{ideal:720} }
+      video:{ deviceId:{exact:deviceId}, facingMode:"environment", width:{ideal:600}, height:{ideal:400} }
     }).then(stream=>{
       videoEl.srcObject = stream;
       videoEl.play();
@@ -274,3 +274,4 @@ window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
 </script>
 </body>
 </html>
+
