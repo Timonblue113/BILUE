@@ -1,302 +1,210 @@
 <!doctype html>
 <html lang="vi">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Tra cứu SKU — Online & Offline</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tra cứu SKU — Online & Offline</title>
 
-  <!-- Tabulator -->
-  <link href="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@latest"></script>
 
-  <!-- SheetJS -->
-  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-
-  <!-- ZXing for barcode scanning -->
-  <script src="https://unpkg.com/@zxing/library@latest"></script>
-
-  <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#f5f7f8;margin:0;padding:18px}
-    .wrap{max-width:1200px;margin:0 auto;background:#fff;padding:16px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,0.06)}
-    h1{margin:0 0 12px 0;font-size:20px;color:#0f766e}
-    .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-    input[type="text"],input[type="file"],button{padding:8px;border-radius:6px;border:1px solid #ccc}
-    button{background:#0ea5a4;color:#fff;border:0;cursor:pointer}
-    button.secondary{background:#64748b}
-    #message{color:#334155;margin-left:8px;font-size:13px}
-    #table-holder{margin-top:8px}
-    @media(max-width:720px){.controls{flex-direction:column;align-items:stretch}}
-    .hint{font-size:13px;color:#566574;margin-top:6px}
-    .del-btn{background:#dc2626;color:#fff;border:none;border-radius:5px;padding:4px 8px;cursor:pointer}
-    .del-btn:hover{background:#b91c1c}
-
-    /* Camera modal */
-    #camera-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(3px);z-index:9999;justify-content:center;align-items:center;}
-    #camera-modal > div{background:#fff;padding:10px;border-radius:10px;text-align:center;}
-    #cameraView{border-radius:6px;}
-  </style>
+<style>
+body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#f5f7f8;margin:0;padding:18px}
+.wrap{max-width:1200px;margin:0 auto;background:#fff;padding:16px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,0.06)}
+h1{margin:0 0 12px 0;font-size:20px;color:#0f766e}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+input[type="text"],input[type="file"],button{padding:8px;border-radius:6px;border:1px solid #ccc}
+button{background:#0ea5a4;color:#fff;border:0;cursor:pointer}
+button.secondary{background:#64748b}
+#message{color:#334155;margin-left:8px;font-size:13px}
+#table-holder{margin-top:8px}
+@media(max-width:720px){.controls{flex-direction:column;align-items:stretch}}
+.hint{font-size:13px;color:#566574;margin-top:6px}
+.del-btn{background:#dc2626;color:#fff;border:none;border-radius:5px;padding:4px 8px;cursor:pointer}
+.del-btn:hover{background:#b91c1c}
+#camera-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(3px);z-index:9999;justify-content:center;align-items:center;}
+#camera-modal > div{background:#fff;padding:10px;border-radius:10px;text-align:center;}
+#cameraView{border-radius:6px;}
+</style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Quản lý & Tra cứu SKU — Online/Offline</h1>
+<h1>Quản lý & Tra cứu SKU — Online/Offline</h1>
 
-  <div class="controls">
-    <input id="searchBox" type="text" placeholder="Nhập SKU / Tên hàng / Nhãn hiệu..." style="min-width:300px" />
-    <button id="searchBtn" class="secondary">🔍 Tìm kiếm</button>
-    <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
-    <button id="loadFileBtn">Nạp file</button>
-    <button id="addRowBtn" class="secondary">➕ Thêm dòng</button>
-    <button id="clearTableBtn" class="secondary">🧹 Xóa bảng</button>
-    <button id="downloadXLSXBtn">⬇ Xuất Excel</button>
-    <button id="scanBtn" class="secondary">📷 Quét UPC</button>
-    <div id="message">Đang tải dữ liệu từ Google Sheets...</div>
-  </div>
+<div class="controls">
+<input id="searchBox" type="text" placeholder="Nhập SKU / Tên hàng / Nhãn hiệu..." style="min-width:300px" />
+<button id="searchBtn" class="secondary">🔍 Tìm kiếm</button>
+<input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
+<button id="loadFileBtn">Nạp file</button>
+<button id="addRowBtn" class="secondary">➕ Thêm dòng</button>
+<button id="clearTableBtn" class="secondary">🧹 Xóa bảng</button>
+<button id="downloadXLSXBtn">⬇ Xuất Excel</button>
+<button id="scanBtn" class="secondary">📷 Quét UPC</button>
+<div id="message">Đang tải dữ liệu từ Google Sheets...</div>
+</div>
 
-  <div class="hint">
-    1) Web tự nạp dữ liệu Google Sheets khi mở trang →<br>
-    2) Nhập từ khóa & Enter để tìm (cộng dồn, cho phép SKU trùng) →<br>
-    3) Sửa, thêm dòng, hoặc 🗑 xóa dòng sai →<br>
-    4) Xuất Excel hoặc Xóa bảng để tải lại.
-  </div>
+<div class="hint">
+1) Web tự nạp dữ liệu Google Sheets khi mở trang →<br>
+2) Nhập từ khóa & Enter để tìm (cộng dồn, cho phép SKU trùng) →<br>
+3) Sửa, thêm dòng, hoặc 🗑 xóa dòng sai →<br>
+4) Xuất Excel hoặc Xóa bảng để tải lại.
+</div>
 
-  <div id="table-holder" style="margin-top:12px; display:none;">
-    <div id="sku-table"></div>
-  </div>
+<div id="table-holder" style="margin-top:12px; display:none;">
+<div id="sku-table"></div>
+</div>
 </div>
 
 <audio id="beepSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
 
 <div id="camera-modal">
-  <div>
-    <h3>📸 Quét mã UPC</h3>
-    <video id="cameraView" width="320" height="240" autoplay></video>
-    <br>
-    <select id="cameraSelect"></select>
-    <br>
-    <button id="closeCamBtn" style="margin-top:8px;">Đóng</button>
-  </div>
+<div>
+<h3>📸 Quét mã UPC</h3>
+<video id="cameraView" width="320" height="240" autoplay></video>
+<br>
+<select id="cameraSelect"></select>
+<br>
+<button id="closeCamBtn" style="margin-top:8px;">Đóng</button>
+</div>
 </div>
 
 <script>
-/* ====== Hàm định dạng & xóa ====== */
+/* ======== Tabulator setup & helper ======== */
 function deleteIcon(){return "<button class='del-btn'>Xóa</button>";}
 function deleteRow(e,cell){
   const row=cell.getRow();
   const index=displayedData.indexOf(row.getData());
-  if(index>-1){
-    displayedData.splice(index,1);
-    row.delete();
-    refreshSTT();
-    showMessage("🗑 Đã xóa 1 dòng khỏi bảng hiển thị.");
-  }
+  if(index>-1){displayedData.splice(index,1);row.delete();refreshSTT();showMessage("🗑 Đã xóa 1 dòng");}
 }
 
-/* ====== Cấu hình cột mặc định ====== */
 const defaultColumns=[
-  {title:"STT", formatter:"rownum", width:60, hozAlign:"center"},
-  {title:"🗑", formatter:deleteIcon, width:60, hozAlign:"center", headerSort:false, cellClick:deleteRow},
-  {title:"NH", field:"NH", editor:"input", width:70},
-  {title:"SKU", field:"SKU", editor:"input"},
-  {title:"Nhãn Hiệu", field:"NhanHieu", editor:"input"},
-  {title:"Tên Hàng", field:"TenHang", editor:"input", width:300},
-  {title:"Mô Tả", field:"MoTa", editor:"input", width:250},
-  {title:"Quy Cách", field:"QuyCach", editor:"input"},
-  {title:"Giá Bán", field:"GiaBan", editor:"input"},
-  {title:"Giá Gốc", field:"GiaGoc", editor:"input"},
-  {title:"Quà Tặng", field:"QuaTang", editor:"input"},
-  {title:"Áp Dụng", field:"ApDung", editor:"input"},
-  {title:"Ngày Nhập", field:"NgayNhap", editor:"input"},
-  {title:"UPC", field:"UPC", editor:"input"}
+{title:"STT", formatter:"rownum", width:60, hozAlign:"center"},
+{title:"🗑", formatter:deleteIcon, width:60, hozAlign:"center", headerSort:false, cellClick:deleteRow},
+{title:"NH", field:"NH", editor:"input", width:70},
+{title:"SKU", field:"SKU", editor:"input"},
+{title:"Nhãn Hiệu", field:"NhanHieu", editor:"input"},
+{title:"Tên Hàng", field:"TenHang", editor:"input", width:300},
+{title:"Mô Tả", field:"MoTa", editor:"input", width:250},
+{title:"Quy Cách", field:"QuyCach", editor:"input"},
+{title:"Giá Bán", field:"GiaBan", editor:"input"},
+{title:"Giá Gốc", field:"GiaGoc", editor:"input"},
+{title:"Quà Tặng", field:"QuaTang", editor:"input"},
+{title:"Áp Dụng", field:"ApDung", editor:"input"},
+{title:"Ngày Nhập", field:"NgayNhap", editor:"input"},
+{title:"UPC", field:"UPC", editor:"input"}
 ];
 
-let table=new Tabulator("#sku-table",{
-  height:"520px",
-  data:[],
-  layout:"fitColumns",
-  reactiveData:true,
-  columns:defaultColumns,
-  placeholder:"Đang nạp dữ liệu...",
-  cellEdited:()=>sourceData=table.getData(),
-});
+let table=new Tabulator("#sku-table",{height:"520px",data:[],layout:"fitColumns",reactiveData:true,columns:defaultColumns,placeholder:"Đang nạp dữ liệu...",cellEdited:()=>sourceData=table.getData()});
+let sourceData=[],displayedData=[],currentColumns=defaultColumns.map(c=>c.field);
 
-let sourceData=[];
-let currentColumns=defaultColumns.map(c=>c.field);
-let displayedData=[];
-
-/* ====== Hỗ trợ ====== */
 function normalizeKey(k){return String(k||'').trim();}
-function showMessage(msg,isError=false){
-  const el=document.getElementById('message');
-  el.textContent=msg;
-  el.style.color=isError?"#b91c1c":"#334155";
-}
-function refreshSTT(){ table.redraw(true); }
-
-/* ====== Thiết lập bảng ====== */
+function showMessage(msg,isError=false){const el=document.getElementById('message');el.textContent=msg;el.style.color=isError?"#b91c1c":"#334155";}
+function refreshSTT(){table.redraw(true);}
 function setTableData(arr){
-  sourceData=arr.map(r=>{
-    const out={};
-    Object.keys(r).forEach(k=>out[normalizeKey(k)]=r[k]==null?"":String(r[k]));
-    return out;
-  });
-  table.clearData();
-  displayedData=[];
-  table.setData(sourceData);
-  document.getElementById('table-holder').style.display='block';
-  showMessage("✅ Đã tải "+arr.length+" dòng từ Google Sheets — sẵn sàng tra cứu!");
+sourceData=arr.map(r=>{const out={};Object.keys(r).forEach(k=>out[normalizeKey(k)]=r[k]==null?"":String(r[k]));return out;});
+table.clearData();displayedData=[];table.setData(sourceData);
+document.getElementById('table-holder').style.display='block';
+showMessage("✅ Đã tải "+arr.length+" dòng từ Google Sheets");
 }
 
-/* ====== Load file hoặc Google Sheets ====== */
+/* ====== Load file / Google Sheet ====== */
 function loadFile(file){
-  const reader=new FileReader();
-  const name=(file.name||'').toLowerCase();
-  reader.onload=function(e){
-    try{
-      let arr;
-      if(name.endsWith(".csv")){
-        const wb=XLSX.read(e.target.result,{type:"string"});
-        arr=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});
-      }else{
-        const wb=XLSX.read(e.target.result,{type:"array"});
-        arr=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});
-      }
-      setTableData(arr);
-    }catch(err){ showMessage("Lỗi khi đọc file: "+err.message,true); }
-  };
-  if(name.endsWith(".csv")) reader.readAsText(file,"utf-8");
-  else reader.readAsArrayBuffer(file);
+const reader=new FileReader();
+const name=(file.name||'').toLowerCase();
+reader.onload=function(e){
+try{
+let arr;
+if(name.endsWith(".csv")){const wb=XLSX.read(e.target.result,{type:"string"});arr=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});}
+else{const wb=XLSX.read(e.target.result,{type:"array"});arr=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});}
+setTableData(arr);
+}catch(err){showMessage("Lỗi khi đọc file: "+err.message,true);}
+};
+if(name.endsWith(".csv")) reader.readAsText(file,"utf-8"); else reader.readAsArrayBuffer(file);
 }
-
 function loadFromGoogleSheet(){
-  const sheetURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv";
-  showMessage("🔄 Đang tải dữ liệu từ Google Sheets...");
-  fetch(sheetURL)
-    .then(r=>r.text())
-    .then(txt=>{
-      const wb=XLSX.read(txt,{type:"string"});
-      const data=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});
-      setTableData(data);
-    })
-    .catch(err=>showMessage("❌ Lỗi tải Google Sheets: "+err,true));
+const sheetURL="https://docs.google.com/spreadsheets/d/e/2PACX-1vTH8IaOB5nDtf4HFkXO-eldwQbG81Rt1cTEkYURUCFsNiZjzuLxCG_b731-Q9LLmnpwpEkQaCxOAkCR/pub?output=csv";
+showMessage("🔄 Đang tải dữ liệu từ Google Sheets...");
+fetch(sheetURL).then(r=>r.text()).then(txt=>{
+const wb=XLSX.read(txt,{type:"string"});const data=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});setTableData(data);
+}).catch(err=>showMessage("❌ Lỗi tải Google Sheets: "+err,true));
 }
 
-/* ====== Tìm kiếm ====== */
+/* ====== Search ====== */
 function doSearch(){
-  const q=document.getElementById('searchBox').value.trim().toLowerCase();
-  if(!sourceData.length){showMessage("Chưa có dữ liệu!",true);return;}
-  if(!q){showMessage("Ô tìm kiếm trống — giữ nguyên dữ liệu hiện có.");return;}
-  const filtered=sourceData.filter(row=>Object.values(row).some(v=>String(v||'').toLowerCase().includes(q)));
-  if(filtered.length){
-    displayedData=displayedData.concat(filtered);
-    table.setData(displayedData);
-    table.redraw(true);
-    showMessage("Đã thêm "+filtered.length+" dòng (tổng: "+displayedData.length+")");
-  }else showMessage("Không tìm thấy SKU nào khớp '"+q+"'",true);
-  document.getElementById('searchBox').value="";
+const q=document.getElementById('searchBox').value.trim().toLowerCase();
+if(!sourceData.length){showMessage("Chưa có dữ liệu!",true);return;}
+if(!q){showMessage("Ô tìm kiếm trống.");return;}
+let filtered=sourceData.filter(row=>Object.values(row).some(v=>String(v||'').toLowerCase().includes(q)));
+if(filtered.length){displayedData=displayedData.concat(filtered);table.setData(displayedData);table.redraw(true);showMessage("Đã thêm "+filtered.length+" dòng");}
+else showMessage("Không tìm thấy '"+q+"'",true);
+document.getElementById('searchBox').value="";
 }
 
-/* ====== Các nút ====== */
+/* ====== Buttons ====== */
 document.getElementById('loadFileBtn').addEventListener('click',()=>{
-  const f=document.getElementById('fileInput').files[0];
-  if(!f) loadFromGoogleSheet(); else loadFile(f);
+const f=document.getElementById('fileInput').files[0];if(!f)loadFromGoogleSheet(); else loadFile(f);
 });
 document.getElementById('searchBtn').addEventListener('click',doSearch);
-document.getElementById('searchBox').addEventListener('keydown',e=>{
-  if(e.key==="Enter"){e.preventDefault();doSearch();}
-});
+document.getElementById('searchBox').addEventListener('keydown',e=>{if(e.key==="Enter"){e.preventDefault();doSearch();}});
 document.getElementById('addRowBtn').addEventListener('click',()=>{
-  const empty={};(currentColumns.length?currentColumns:defaultColumns.map(c=>c.field)).forEach(k=>empty[k]='');
-  table.addRow(empty,true).then(row=>{
-    displayedData.push(empty);
-    sourceData.push(empty);
-    refreshSTT();
-    showMessage("Đã thêm dòng mới. Nhập dữ liệu và Enter để lưu.");
-  });
-  document.getElementById('table-holder').style.display='block';
+const empty={};currentColumns.forEach(k=>empty[k]='');
+table.addRow(empty,true).then(()=>{displayedData.push(empty);sourceData.push(empty);refreshSTT();showMessage("Đã thêm dòng mới");});
+document.getElementById('table-holder').style.display='block';
 });
 document.getElementById('clearTableBtn').addEventListener('click',()=>{
-  table.clearData();
-  displayedData=[];
-  showMessage("🧹 Đã xóa bảng. Đang tải lại dữ liệu gốc...");
-  setTimeout(loadFromGoogleSheet,600);
+table.clearData();displayedData=[];showMessage("🧹 Đã xóa bảng, tải lại dữ liệu...");setTimeout(loadFromGoogleSheet,600);
 });
 document.getElementById('downloadXLSXBtn').addEventListener('click',()=>{
-  displayedData=table.getData();
-  if(!displayedData.length){showMessage("Không có dữ liệu để tải",true);return;}
-  const ws=XLSX.utils.json_to_sheet(displayedData);
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,"Data");
-  XLSX.writeFile(wb,"BKM_export.xlsx");
-  showMessage("✅ Đã xuất file Excel thành công!");
+displayedData=table.getData();if(!displayedData.length){showMessage("Không có dữ liệu",true);return;}
+const ws=XLSX.utils.json_to_sheet(displayedData);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Data");XLSX.writeFile(wb,"BKM_export.xlsx");showMessage("✅ Xuất Excel thành công");
 });
 
 /* ====== Camera UPC Scan ====== */
-let codeReader = null;
-let scanning = false;
-let selectedDevice = "";
+let codeReader=null;let scanning=false;let selectedDevice="";
+const video=document.getElementById("cameraView");
 
 ZXing.BrowserMultiFormatReader.listVideoInputDevices().then(devices=>{
-  const sel = document.getElementById("cameraSelect");
-  devices.forEach(d=>{
-    const opt = document.createElement("option");
-    opt.value = d.deviceId;
-    opt.textContent = d.label || "Camera "+sel.length;
-    sel.appendChild(opt);
-  });
-  if(devices.length) selectedDevice = devices[0].deviceId;
+const sel=document.getElementById("cameraSelect");
+devices.forEach((d,i)=>{const opt=document.createElement("option");opt.value=d.deviceId;opt.textContent=d.label||"Camera "+i;sel.appendChild(opt);});
+if(devices.length){selectedDevice=devices[0].deviceId;sel.value=selectedDevice;}
 });
 
-document.getElementById("cameraSelect").addEventListener("change", e=>{
-  selectedDevice = e.target.value;
-  if(scanning){ stopScan(); startScan(); }
-});
+document.getElementById("cameraSelect").addEventListener("change", e=>{selectedDevice=e.target.value;if(scanning){stopScan();startScan();}});
 
 document.getElementById("scanBtn").addEventListener("click", ()=>{
-  document.getElementById("camera-modal").style.display = "flex";
-  startScan();
+document.getElementById("camera-modal").style.display="flex";startScan();
 });
 
-document.getElementById("closeCamBtn").addEventListener("click", stopScan);
+document.getElementById("closeCamBtn").addEventListener("click",stopScan);
 
 function startScan(){
-  scanning = true;
-  const video = document.getElementById("cameraView");
-  codeReader = new ZXing.BrowserMultiFormatReader();
-  codeReader.decodeFromVideoDevice(selectedDevice, video, (result, err)=>{
-    if(result){
-      const code = result.text.trim();
-      video.style.outline = "4px solid #22c55e";
-      setTimeout(()=>video.style.outline="",150);
-      document.getElementById("beepSound").play().catch(()=>{});
-      searchByCode(code);
-    }
-  });
+scanning=true;codeReader=new ZXing.BrowserMultiFormatReader();
+codeReader.decodeFromVideoDevice(selectedDevice,video,(result,err)=>{
+if(result){
+const code=result.text.trim();
+video.style.outline="4px solid #22c55e";
+setTimeout(()=>video.style.outline="",150);
+document.getElementById("beepSound").play().catch(()=>{});
+searchByCode(code);
+}
+});
 }
 
-function stopScan(){
-  scanning = false;
-  if(codeReader) codeReader.reset();
-  document.getElementById("camera-modal").style.display = "none";
-}
+function stopScan(){scanning=false;if(codeReader)codeReader.reset();document.getElementById("camera-modal").style.display="none";}
 
 function searchByCode(code){
-  const c = String(code).trim();
-  let f = sourceData.filter(r=>String(r.SKU||"").trim()===c);
-  if(!f.length) f = sourceData.filter(r=>String(r.UPC||"").trim()===c);
-  if(!f.length) f = sourceData.filter(r=>Object.values(r).some(v=>String(v||"").trim()===c));
-  if(f.length){
-    displayedData = displayedData.concat(f);
-    table.setData(displayedData);
-    table.redraw(true);
-    showMessage("🔍 Tìm thấy "+f.length+" dòng");
-    document.getElementById("beepSound").play().catch(()=>{});
-  }else{
-    showMessage("❌ Không tìm thấy mã "+c,true);
-  }
+const c=String(code).trim();
+let f=sourceData.filter(r=>String(r.SKU||"").trim()===c);
+if(!f.length) f=sourceData.filter(r=>String(r.UPC||"").trim()===c);
+if(!f.length) f=sourceData.filter(r=>Object.values(r).some(v=>String(v||"").trim()===c));
+if(f.length){displayedData=displayedData.concat(f);table.setData(displayedData);table.redraw(true);showMessage("🔍 Tìm thấy "+f.length+" dòng");document.getElementById("beepSound").play().catch(()=>{});}
+else showMessage("❌ Không tìm thấy mã "+c,true);
 }
 
-/* ====== Tự động load dữ liệu Google Sheets ====== */
-window.addEventListener('DOMContentLoaded',loadFromGoogleSheet);
+/* ====== Auto load on page ready ====== */
+window.addEventListener('DOMContentLoaded',()=>{loadFromGoogleSheet();});
 </script>
 </body>
 </html>
