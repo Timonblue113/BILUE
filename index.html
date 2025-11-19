@@ -130,20 +130,49 @@ document.getElementById('clearTableBtn').addEventListener('click',()=>{table.cle
 document.getElementById('downloadXLSXBtn').addEventListener('click',()=>{displayedData=table.getData();if(!displayedData.length){showMessage("Không có dữ liệu để tải",true);return;}const ws=XLSX.utils.json_to_sheet(displayedData);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Data");XLSX.writeFile(wb,"BKM_export.xlsx");showMessage("✅ Đã xuất file Excel thành công!");});
 
 /* ===== Scan UPC ===== */
-let codeReader=null, beep=new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
-document.getElementById('scanBtn').addEventListener('click',()=>{
-  const videoContainer=document.getElementById('video-container');
-  videoContainer.style.display='block';
-  if(!codeReader){codeReader=new ZXing.BrowserMultiFormatReader();}
-  codeReader.listVideoInputDevices().then(devices=>{
-    const deviceId=devices.length>0?devices[0].deviceId:null;
-    codeReader.decodeOnceFromVideoDevice(deviceId,"video").then(result=>{
-      beep.play();
-      videoContainer.classList.add("success");
-      document.getElementById('searchBox').value=result.text;
-      doSearch();
-      setTimeout(()=>{videoContainer.style.display='none';videoContainer.classList.remove("success");},1500);
-    }).catch(err=>{showMessage("❌ Lỗi scan: "+err,true);});
+let codeReader = null;
+let beep = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+
+document.getElementById('scanBtn').addEventListener('click', () => {
+  const videoContainer = document.getElementById('video-container');
+  const videoEl = document.getElementById('video');
+  videoContainer.style.display = 'block';
+
+  if (!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
+
+  codeReader.listVideoInputDevices().then(devices => {
+    // Lấy camera sau: devices cuối thường là camera chính
+    let deviceId = devices.length > 0 ? devices[devices.length-1].deviceId : null;
+
+    // Tùy chọn để bật auto-focus
+    const constraints = {
+      video: {
+        deviceId: { exact: deviceId },
+        facingMode: "environment", // camera sau
+        focusMode: "continuous", // auto focus (chỉ Chrome hỗ trợ)
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    };
+
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then(stream => {
+        videoEl.srcObject = stream;
+        videoEl.play();
+        // ZXing scan liên tục
+        codeReader.decodeFromVideoDevice(deviceId, videoEl, (result, err) => {
+          if (result) {
+            beep.play();
+            videoContainer.classList.add("success");
+            document.getElementById('searchBox').value = result.text;
+            doSearch();
+            setTimeout(() => {
+              videoContainer.classList.remove("success");
+            }, 1000);
+          }
+        });
+      })
+      .catch(err => showMessage("❌ Lỗi mở camera: " + err, true));
   });
 });
 
@@ -152,3 +181,4 @@ window.addEventListener('DOMContentLoaded',loadFromGoogleSheet);
 </script>
 </body>
 </html>
+
