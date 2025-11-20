@@ -39,6 +39,11 @@ button.secondary{background:#64748b}
     height:40px;         /* 🔥 CHIỀU CAO KHUNG CAMERA */
     object-fit:cover;     /* Cho hình full khung */
     border-radius:10px;
+    @media (max-width: 600px){
+  #video-container video{
+      height:60px;          /* 🔥 nhỏ bằng 1/2 – đúng yêu cầu */
+      max-width:300px;      /* thu bề ngang để vừa màn hình phone */
+  }
 }
 #video-container button{margin-top:12px;padding:8px 12px;border-radius:6px;border:0;background:#dc2626;color:#fff;cursor:pointer}
 </style>
@@ -280,6 +285,7 @@ window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
 </script>
 </body>
 </html>
+
 
 
 
