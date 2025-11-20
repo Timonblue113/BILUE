@@ -83,6 +83,7 @@ button.secondary{background:#64748b}
 <div id="video-container">
 <video id="video" autoplay></video>
 <button id="closeVideoBtn">Đóng Camera</button>
+<button id="useCodeBtn" style="background:#0ea5a4;">Dùng mã để tìm</button>
 </div>
 </div>
 
@@ -263,8 +264,9 @@ document.getElementById('scanBtn').addEventListener('click', ()=>{
         if(result){
           beep.play();
           videoContainer.classList.add("success");
-          document.getElementById('searchBox').value = result.text;
-          doSearch();
+         document.getElementById('searchBox').value = result.text;
+// Không tự doSearch nữa
+         window.lastScannedCode = result.text;   // lưu lại
           setTimeout(()=>videoContainer.classList.remove("success"),1000);
         }
       });
@@ -283,12 +285,18 @@ document.getElementById('closeVideoBtn').addEventListener('click', ()=>{
     videoEl.srcObject=null;
   }
 });
-
+document.getElementById('useCodeBtn').addEventListener('click', ()=>{
+    if(window.lastScannedCode){
+        document.getElementById('searchBox').value = window.lastScannedCode;
+        doSearch();
+    }
+});
 /* ====== Auto load Google Sheet khi mở trang ===== */
 window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
 </script>
 </body>
 </html>
+
 
 
 
