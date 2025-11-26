@@ -244,55 +244,69 @@ document.getElementById('downloadXLSXBtn').addEventListener('click',()=>{
 /* ====== Scan UPC ===== */
 const beep = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
 let codeReader = null;
-document.getElementById('scanBtn').addEventListener('click', ()=>{
-  const videoContainer = document.getElementById('video-container');
-  const videoEl = document.getElementById('video');
-  videoContainer.style.display = 'flex';
 
-  if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
+document.getElementById('scanBtn').addEventListener('click', async ()=>{
+    const videoContainer = document.getElementById('video-container');
+    const videoEl = document.getElementById('video');
+    videoContainer.style.display = 'flex';
 
-  codeReader.listVideoInputDevices().then(devices=>{
-    let deviceId = devices.length>0?devices[devices.length-1].deviceId:null;
+    if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
 
-    navigator.mediaDevices.getUserMedia({
-      video:{ deviceId:{exact:deviceId}, facingMode:"environment", width:{ideal:500}, height:{ideal:200} }
-    }).then(stream=>{
-      videoEl.srcObject = stream;
-      videoEl.play();
+    try {
+        const devices = await codeReader.listVideoInputDevices();
+        let deviceId = devices.length>0 ? devices[devices.length-1].deviceId : null;
 
-      codeReader.decodeFromVideoDevice(deviceId, videoEl, (result, err)=>{
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video:{ deviceId:{exact:deviceId}, facingMode:"environment", width:{ideal:500}, height:{ideal:200} }
+        });
+
+        videoEl.srcObject = stream;
+        videoEl.play();
+
+        // Quét **1 lần duy nhất** → decodeOnceFromVideoDevice
+        const result = await codeReader.decodeOnceFromVideoDevice(deviceId, "video");
         if(result){
-          beep.play();
-          videoContainer.classList.add("success");
-         document.getElementById('searchBox').value = result.text;
-// Không tự doSearch nữa
-         window.lastScannedCode = result.text;   // lưu lại
-          setTimeout(()=>videoContainer.classList.remove("success"),1000);
+            beep.play();
+            videoContainer.classList.add("success");
+            document.getElementById('searchBox').value = result.text;
+            window.lastScannedCode = result.text;
+
+            // Dừng camera ngay sau khi quét xong
+            stream.getTracks().forEach(track=>track.stop());
+            videoEl.srcObject = null;
+
+            setTimeout(()=>videoContainer.classList.remove("success"), 1000);
+            videoContainer.style.display = 'none';
         }
-      });
-    }).catch(err=>showMessage("❌ Lỗi mở camera: "+err,true));
-  });
+
+    } catch(err){
+        showMessage("❌ Lỗi mở camera hoặc quét: "+err,true);
+    }
 });
 
-// Đóng camera
-document.getElementById('closeVideoBtn').addEventListener('click', ()=>{
-  const videoContainer = document.getElementById('video-container');
-  videoContainer.style.display='none';
-  const videoEl = document.getElementById('video');
-  let stream = videoEl.srcObject;
-  if(stream){
-    stream.getTracks().forEach(track=>track.stop());
-    videoEl.srcObject=null;
-  }
-});
+// Dùng lại mã đã scan
 document.getElementById('useCodeBtn').addEventListener('click', ()=>{
     if(window.lastScannedCode){
         document.getElementById('searchBox').value = window.lastScannedCode;
         doSearch();
     }
 });
+
+// Đóng camera thủ công
+document.getElementById('closeVideoBtn').addEventListener('click', ()=>{
+    const videoContainer = document.getElementById('video-container');
+    videoContainer.style.display='none';
+    const videoEl = document.getElementById('video');
+    let stream = videoEl.srcObject;
+    if(stream){
+        stream.getTracks().forEach(track=>track.stop());
+        videoEl.srcObject=null;
+    }
+});
+
 /* ====== Auto load Google Sheet khi mở trang ===== */
 window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
 </script>
 </body>
 </html>
+
