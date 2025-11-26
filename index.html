@@ -242,25 +242,11 @@ document.getElementById('downloadXLSXBtn').addEventListener('click',()=>{
 });
 
 /* ====== Scan UPC ===== */
+/* ====== Scan UPC — CHỈ QUÉT 1 LẦN ===== */
 const beep = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
 let codeReader = null;
+
 document.getElementById('scanBtn').addEventListener('click', ()=>{
-  const videoContainer = document.getElementById('video-container');
-  const videoEl = document.getElementById('video');
-  videoContainer.style.display = 'flex';
-
-  if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
-
-  codeReader.listVideoInputDevices().then(devices=>{
-    let deviceId = devices.length>0?devices[devices.length-1].deviceId:null;
-
-    navigator.mediaDevices.getUserMedia({
-      video:{ deviceId:{exact:deviceId}, facingMode:"environment", width:{ideal:500}, height:{ideal:200} }
-    }).then(stream=>{
-      videoEl.srcObject = stream;
-      videoEl.play();
-
-    document.getElementById('scanBtn').addEventListener('click', ()=>{
 
     const videoContainer = document.getElementById('video-container');
     const videoEl = document.getElementById('video');
@@ -277,12 +263,12 @@ document.getElementById('scanBtn').addEventListener('click', ()=>{
             videoEl.srcObject = stream;
             videoEl.play();
 
-            // ⭐ CHỈ QUÉT 1 LẦN — KHÔNG LOOP
+            // ⭐ Chỉ quét 1 lần — KHÔNG LOOP LIÊN TỤC
             codeReader.decodeOnceFromVideoElement(videoEl).then(result=>{
                 beep.play();
                 videoContainer.classList.add("success");
 
-                window.lastScannedCode = result.text; // chỉ lưu, KHÔNG tự tìm
+                window.lastScannedCode = result.text; // chỉ lưu mã
                 document.getElementById('searchBox').value = result.text;
 
                 setTimeout(()=>videoContainer.classList.remove("success"),1000);
@@ -298,40 +284,30 @@ document.getElementById('scanBtn').addEventListener('click', ()=>{
     });
 });
 
-
-// Đóng camera
+/* ====== NÚT ĐÓNG CAMERA ===== */
 document.getElementById('closeVideoBtn').addEventListener('click', ()=>{
-  const videoContainer = document.getElementById('video-container');
-  videoContainer.style.display='none';
-  const videoEl = document.getElementById('video');
-  let stream = videoEl.srcObject;
-  if(stream){
-    stream.getTracks().forEach(track=>track.stop());
-    videoEl.srcObject=null;
-  }
+    const videoContainer = document.getElementById('video-container');
+    videoContainer.style.display='none';
+
+    const videoEl = document.getElementById('video');
+    let stream = videoEl.srcObject;
+    if(stream){
+        stream.getTracks().forEach(track=>track.stop());
+        videoEl.srcObject = null;
+    }
 });
+
+/* ====== NÚT “Dùng mã để tìm” ===== */
 document.getElementById('useCodeBtn').addEventListener('click', ()=>{
     if(window.lastScannedCode){
         document.getElementById('searchBox').value = window.lastScannedCode;
         doSearch();
     }
 });
+
 /* ====== Auto load Google Sheet khi mở trang ===== */
 window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+SỮA CODE SAO CHO NÚT SCAN MÃ 13 NHẤN VÀO MỚI NHẬN DỮ LIỆU CÒN KHÔNG THÌ THOI KO KIÊU BIP BIP LIÊN TỤC ? 
