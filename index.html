@@ -242,68 +242,75 @@ document.getElementById('downloadXLSXBtn').addEventListener('click',()=>{
 });
 
 /* ====== Scan UPC ===== */
-/* ====== Scan UPC — CHỈ QUÉT 1 LẦN ===== */
+/* ====== Scan UPC ===== */
 const beep = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
 let codeReader = null;
+let currentStream = null;
 
-document.getElementById('scanBtn').addEventListener('click', ()=>{
+document.getElementById('scanBtn').addEventListener('click', async ()=>{
 
     const videoContainer = document.getElementById('video-container');
     const videoEl = document.getElementById('video');
     videoContainer.style.display = 'flex';
 
-    if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
+    if (!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
 
-    codeReader.listVideoInputDevices().then(devices=>{
-        let deviceId = devices.length>0 ? devices[devices.length-1].deviceId : null;
+    // Lấy danh sách camera
+    const devices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
 
-        navigator.mediaDevices.getUserMedia({
-            video:{ deviceId:{exact:deviceId}, facingMode:"environment" }
-        }).then(stream=>{
-            videoEl.srcObject = stream;
-            videoEl.play();
+    // Ưu tiên camera sau (environment)
+    let backCam = devices.find(d =>
+        d.label.toLowerCase().includes("back") ||
+        d.label.toLowerCase().includes("environment")
+    );
+    let deviceId = backCam ? backCam.deviceId : devices[0].deviceId;
 
-            // ⭐ Chỉ quét 1 lần — KHÔNG LOOP LIÊN TỤC
-            codeReader.decodeOnceFromVideoElement(videoEl).then(result=>{
-                beep.play();
-                videoContainer.classList.add("success");
-
-                window.lastScannedCode = result.text; // chỉ lưu mã
-                document.getElementById('searchBox').value = result.text;
-
-                setTimeout(()=>videoContainer.classList.remove("success"),1000);
-
-            }).catch(err=>{
-                console.log("Không đọc được mã:", err);
-            });
-
-        }).catch(err=>{
-            showMessage("❌ Lỗi mở camera: "+err, true);
-        });
-
+    // Mở camera với autofocus liên tục
+    currentStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+            deviceId: { exact: deviceId },
+            focusMode: "continuous",
+            advanced: [{ focusMode: "continuous" }]
+        }
     });
+
+    videoEl.srcObject = currentStream;
+    videoEl.play();
+
+    // BẮT ĐẦU QUÉT — CHỈ ĐÚNG API CHUẨN
+    codeReader.decodeFromVideoDevice(deviceId, "video", (result, err) => {
+        if (result) {
+            beep.play();
+            videoContainer.classList.add("success");
+
+            window.lastScannedCode = result.text;
+            document.getElementById('searchBox').value = result.text;
+
+            setTimeout(()=> videoContainer.classList.remove("success"), 800);
+        }
+    });
+
 });
 
-/* ====== NÚT ĐÓNG CAMERA ===== */
+// Đóng camera
 document.getElementById('closeVideoBtn').addEventListener('click', ()=>{
     const videoContainer = document.getElementById('video-container');
     videoContainer.style.display='none';
 
-    const videoEl = document.getElementById('video');
-    let stream = videoEl.srcObject;
-    if(stream){
-        stream.getTracks().forEach(track=>track.stop());
-        videoEl.srcObject = null;
+    if (currentStream){
+        currentStream.getTracks().forEach(t => t.stop());
     }
+    document.getElementById('video').srcObject = null;
 });
 
-/* ====== NÚT “Dùng mã để tìm” ===== */
+// Use code để tìm
 document.getElementById('useCodeBtn').addEventListener('click', ()=>{
-    if(window.lastScannedCode){
+    if (window.lastScannedCode){
         document.getElementById('searchBox').value = window.lastScannedCode;
         doSearch();
     }
 });
+
 
 /* ====== Auto load Google Sheet khi mở trang ===== */
 window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
@@ -311,3 +318,4 @@ window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
 </body>
 </html>
 SỮA CODE SAO CHO NÚT SCAN MÃ 13 NHẤN VÀO MỚI NHẬN DỮ LIỆU CÒN KHÔNG THÌ THOI KO KIÊU BIP BIP LIÊN TỤC ? 
+
