@@ -260,19 +260,44 @@ document.getElementById('scanBtn').addEventListener('click', ()=>{
       videoEl.srcObject = stream;
       videoEl.play();
 
-      codeReader.decodeFromVideoDevice(deviceId, videoEl, (result, err)=>{
-        if(result){
-          beep.play();
-          videoContainer.classList.add("success");
-         document.getElementById('searchBox').value = result.text;
-// Không tự doSearch nữa
-         window.lastScannedCode = result.text;   // lưu lại
-          setTimeout(()=>videoContainer.classList.remove("success"),1000);
-        }
-      });
-    }).catch(err=>showMessage("❌ Lỗi mở camera: "+err,true));
-  });
+    document.getElementById('scanBtn').addEventListener('click', ()=>{
+
+    const videoContainer = document.getElementById('video-container');
+    const videoEl = document.getElementById('video');
+    videoContainer.style.display = 'flex';
+
+    if(!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
+
+    codeReader.listVideoInputDevices().then(devices=>{
+        let deviceId = devices.length>0 ? devices[devices.length-1].deviceId : null;
+
+        navigator.mediaDevices.getUserMedia({
+            video:{ deviceId:{exact:deviceId}, facingMode:"environment" }
+        }).then(stream=>{
+            videoEl.srcObject = stream;
+            videoEl.play();
+
+            // ⭐ CHỈ QUÉT 1 LẦN — KHÔNG LOOP
+            codeReader.decodeOnceFromVideoElement(videoEl).then(result=>{
+                beep.play();
+                videoContainer.classList.add("success");
+
+                window.lastScannedCode = result.text; // chỉ lưu, KHÔNG tự tìm
+                document.getElementById('searchBox').value = result.text;
+
+                setTimeout(()=>videoContainer.classList.remove("success"),1000);
+
+            }).catch(err=>{
+                console.log("Không đọc được mã:", err);
+            });
+
+        }).catch(err=>{
+            showMessage("❌ Lỗi mở camera: "+err, true);
+        });
+
+    });
 });
+
 
 // Đóng camera
 document.getElementById('closeVideoBtn').addEventListener('click', ()=>{
@@ -296,6 +321,7 @@ window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
 </script>
 </body>
 </html>
+
 
 
 
