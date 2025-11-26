@@ -244,7 +244,9 @@ document.getElementById('downloadXLSXBtn').addEventListener('click',()=>{
 /* ====== Scan UPC ===== */
 const beep = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
 let codeReader = null;
+let currentStream = null;
 
+// Mở khung scan (chỉ mở video, chưa quét)
 document.getElementById('scanBtn').addEventListener('click', async ()=>{
     const videoContainer = document.getElementById('video-container');
     const videoEl = document.getElementById('video');
@@ -256,51 +258,51 @@ document.getElementById('scanBtn').addEventListener('click', async ()=>{
         const devices = await codeReader.listVideoInputDevices();
         let deviceId = devices.length>0 ? devices[devices.length-1].deviceId : null;
 
-        const stream = await navigator.mediaDevices.getUserMedia({
+        currentStream = await navigator.mediaDevices.getUserMedia({
             video:{ deviceId:{exact:deviceId}, facingMode:"environment", width:{ideal:500}, height:{ideal:200} }
         });
 
-        videoEl.srcObject = stream;
+        videoEl.srcObject = currentStream;
         videoEl.play();
 
-        // Quét **1 lần duy nhất** → decodeOnceFromVideoDevice
-        const result = await codeReader.decodeOnceFromVideoDevice(deviceId, "video");
-        if(result){
-            beep.play();
-            videoContainer.classList.add("success");
-            document.getElementById('searchBox').value = result.text;
-            window.lastScannedCode = result.text;
-
-            // Dừng camera ngay sau khi quét xong
-            stream.getTracks().forEach(track=>track.stop());
-            videoEl.srcObject = null;
-
-            setTimeout(()=>videoContainer.classList.remove("success"), 1000);
-            videoContainer.style.display = 'none';
-        }
-
     } catch(err){
-        showMessage("❌ Lỗi mở camera hoặc quét: "+err,true);
+        showMessage("❌ Lỗi mở camera: "+err,true);
     }
 });
 
-// Dùng lại mã đã scan
-document.getElementById('useCodeBtn').addEventListener('click', ()=>{
-    if(window.lastScannedCode){
-        document.getElementById('searchBox').value = window.lastScannedCode;
-        doSearch();
+// Dùng mã để tìm (scan 1 lần + tự tìm)
+document.getElementById('useCodeBtn').addEventListener('click', async ()=>{
+    const videoEl = document.getElementById('video');
+    if(!codeReader || !currentStream){
+        showMessage("Chưa mở camera. Nhấn Scan trước.", true);
+        return;
+    }
+    try {
+        const devices = await codeReader.listVideoInputDevices();
+        let deviceId = devices.length>0 ? devices[devices.length-1].deviceId : null;
+
+        // Quét 1 lần duy nhất
+        const result = await codeReader.decodeOnceFromVideoDevice(deviceId, "video");
+        if(result){
+            beep.play();
+            window.lastScannedCode = result.text;
+            document.getElementById('searchBox').value = window.lastScannedCode;
+            doSearch();
+        }
+    } catch(err){
+        showMessage("❌ Lỗi quét mã: "+err, true);
     }
 });
 
 // Đóng camera thủ công
 document.getElementById('closeVideoBtn').addEventListener('click', ()=>{
     const videoContainer = document.getElementById('video-container');
-    videoContainer.style.display='none';
     const videoEl = document.getElementById('video');
-    let stream = videoEl.srcObject;
-    if(stream){
-        stream.getTracks().forEach(track=>track.stop());
-        videoEl.srcObject=null;
+    videoContainer.style.display = 'none';
+    if(currentStream){
+        currentStream.getTracks().forEach(track=>track.stop());
+        currentStream = null;
+        videoEl.srcObject = null;
     }
 });
 
@@ -309,4 +311,5 @@ window.addEventListener('DOMContentLoaded', loadFromGoogleSheet);
 </script>
 </body>
 </html>
+
 
